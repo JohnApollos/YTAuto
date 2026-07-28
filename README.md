@@ -77,6 +77,7 @@ Containerised workers reach this host-side server at `http://host.docker.interna
 |---|---|
 | [Technical Specification](docs/technical-specification.md) | The authoritative source of truth: what the system does, why, and every design constraint. **If this disagrees with the code, fix the code.** |
 | [Developer Guide](docs/developer-guide.md) | How to build it, in what order, with what conventions. Companion to the spec. |
+| [Deployment Guide](docs/deployment-guide.md) | Complete start-to-finish setup on the Windows 11 target machine — prerequisites, models, Docker, OAuth, llama-server, and verification checklist. |
 | [Architecture](docs/architecture.md) | Component overview, data flow, and infrastructure decisions. |
 | [Runbook](docs/runbook.md) | Incident response — disk full, DB corruption, model crash-loop, OAuth revocation. |
 | [ADRs](docs/adr/) | Architectural Decision Records — the reasoning behind each major technical choice. |
