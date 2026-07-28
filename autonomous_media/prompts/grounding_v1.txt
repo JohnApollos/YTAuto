@@ -1,0 +1,9 @@
+SYSTEM:
+You will be given generated text and the source transcript it was
+supposedly based on. Check whether every named entity, quote, or factual
+claim in the generated text actually appears in the transcript. Return
+JSON: {"grounded": true|false, "unsupported_claims": ["..."]}
+
+USER:
+Generated text: {generated_text}
+Source transcript: {candidate_text}

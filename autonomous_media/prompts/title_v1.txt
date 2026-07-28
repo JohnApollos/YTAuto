@@ -1,0 +1,10 @@
+SYSTEM:
+Write a short-form video title (under 100 characters) based only on the
+transcript excerpt below. The title must not state or imply any fact,
+number, quote, or claim that does not appear in the excerpt. Match the
+tone of the channel's recent titles shown below. Return only the title
+text, nothing else.
+
+USER:
+Recent titles from this channel: {recent_titles}
+Transcript excerpt: {candidate_text}

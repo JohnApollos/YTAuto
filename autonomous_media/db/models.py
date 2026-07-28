@@ -1,10 +1,10 @@
 import uuid
-from sqlalchemy import String, Text, Enum, ForeignKey, DateTime, Integer, JSON, Boolean
+from sqlalchemy import String, Text, Enum as SAEnum, ForeignKey, DateTime, Integer, JSON, Boolean, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from pgvector.sqlalchemy import Vector
 from autonomous_media.db.base import Base
+
 
 class Channel(Base):
     __tablename__ = "channels"
@@ -14,26 +14,28 @@ class Channel(Base):
     niche: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, default="active")
     language: Mapped[str] = mapped_column(String, default="en")
-    project_id: Mapped[str] = mapped_column(String)
+    project_id: Mapped[str] = mapped_column(String)  # spec §5.1 — Google Cloud project's quota pool
     target_duration_min_s: Mapped[int] = mapped_column(Integer)
     target_duration_max_s: Mapped[int] = mapped_column(Integer)
     caption_style: Mapped[str] = mapped_column(String)
     music_profile: Mapped[str] = mapped_column(String)
     branding: Mapped[dict] = mapped_column(JSON, default=dict)
     upload_cadence: Mapped[dict] = mapped_column(JSON, default=dict)
-    allowed_content_types: Mapped[list[str]] = mapped_column(JSON, default=list) # SQLite fallback for array
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    allowed_content_types: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
 
 class ContentSource(Base):
     __tablename__ = "content_sources"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"))
-    type: Mapped[str] = mapped_column(String)
+    type: Mapped[str] = mapped_column(String)  # youtube_channel | rss_feed | ai_story | local_folder
     external_ref: Mapped[str] = mapped_column(String)
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_polled_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    last_polled_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+
 
 class SourceVideo(Base):
     __tablename__ = "source_videos"
@@ -42,93 +44,160 @@ class SourceVideo(Base):
     external_video_id: Mapped[str] = mapped_column(String)
     title: Mapped[str] = mapped_column(String)
     url: Mapped[str] = mapped_column(String)
-    published_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
-    downloaded_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    published_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    downloaded_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
     duration_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String, default="pending")
-    storage_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String, nullable=True)  # MinIO key for raw video
     checksum_sha256: Mapped[str | None] = mapped_column(String, nullable=True)
 
+
 class Transcript(Base):
+    """Only metadata lives here. Full timestamped transcript JSON lives in MinIO at storage_key (spec §8.3)."""
     __tablename__ = "transcripts"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     source_video_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_videos.id"))
-    text: Mapped[str] = mapped_column(Text)
-    segments: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    engine: Mapped[str] = mapped_column(String, default="whisper-large-v3-turbo")  # ASR model used
+    language: Mapped[str] = mapped_column(String, default="en")
+    storage_key: Mapped[str | None] = mapped_column(String, nullable=True)  # MinIO pointer to full JSON
+    word_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+
 
 class Topic(Base):
     __tablename__ = "topics"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     label: Mapped[str] = mapped_column(String)
-    embedding: Mapped[list[float]] = mapped_column(Vector(768))
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    embedding: Mapped[list] = mapped_column(Vector(768))  # dimension must match embedding model output
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
 
-class CandidateClip(Base):
+
+class ClipCandidate(Base):
     __tablename__ = "clip_candidates"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     source_video_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_videos.id"))
     topic_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("topics.id"), nullable=True)
-    start_time_s: Mapped[int] = mapped_column(Integer)
-    end_time_s: Mapped[int] = mapped_column(Integer)
-    transcript_text: Mapped[str] = mapped_column(Text)
+    start_ms: Mapped[int] = mapped_column(Integer)  # milliseconds — word-level precision (spec §8.3)
+    end_ms: Mapped[int] = mapped_column(Integer)    # milliseconds
     scores: Mapped[dict] = mapped_column(JSON, default=dict)
     rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    status: Mapped[str] = mapped_column(String, default="pending")
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    status: Mapped[str] = mapped_column(String, default="pending")  # pending | selected | rejected
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+
 
 class Clip(Base):
     __tablename__ = "clips"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     clip_candidate_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clip_candidates.id"))
+    channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"))  # spec §8.3
     storage_key: Mapped[str] = mapped_column(String)
+    thumbnail_key: Mapped[str | None] = mapped_column(String, nullable=True)  # spec §8.3
     duration_s: Mapped[int] = mapped_column(Integer)
-    status: Mapped[str] = mapped_column(String, default="pending")
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    caption_style: Mapped[str | None] = mapped_column(String, nullable=True)  # spec §8.3
+    status: Mapped[str] = mapped_column(String, default="rendering")  # rendering | qc_passed | qc_failed | ready
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
 
-class Job(Base):
-    __tablename__ = "jobs"
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    target_id: Mapped[str] = mapped_column(String) # polymorphic ID
-    job_type: Mapped[str] = mapped_column(String, nullable=False)
-    status: Mapped[str] = mapped_column(
-        String,
-        default="queued",
-    )
-    payload: Mapped[dict] = mapped_column(JSON, default=dict)
-    priority: Mapped[int] = mapped_column(Integer, default=5)
-    attempts: Mapped[int] = mapped_column(Integer, default=0)
-    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
-    trace_id: Mapped[str] = mapped_column(String, index=True)
-    last_heartbeat_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
-    error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
-    started_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id"))
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"))
-    status: Mapped[str] = mapped_column(String, default="available") # available, published, rejected
-    scheduled_for: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
-    published_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
-    platform_ref: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    status: Mapped[str] = mapped_column(String, default="ready")  # ready | scheduled | published | rejected | archived
+    scheduled_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)  # spec §8.3 field name
+    published_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    external_video_id: Mapped[str | None] = mapped_column(String, nullable=True)  # YouTube video ID after upload
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
 
 class RightsRecord(Base):
+    """
+    Spec §8.3, §11.4: FK is on content_source_id (not source_video_id).
+    Status values: owned | licensed | permission_granted | unknown | denied.
+    Deliberately excludes 'fair_use_asserted' — fair use routes only through manual override path.
+    """
     __tablename__ = "rights_records"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    source_video_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_videos.id"))
-    status: Mapped[str] = mapped_column(String, default="pending") # pending, cleared, flagged
-    flag_reason: Mapped[str | None] = mapped_column(String, nullable=True)
-    cleared_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    content_source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("content_sources.id"))
+    status: Mapped[str] = mapped_column(
+        String, default="unknown"
+    )  # owned | licensed | permission_granted | unknown | denied
+    evidence_ref: Mapped[str | None] = mapped_column(Text, nullable=True)  # URL or document reference
+    reviewed_by: Mapped[str | None] = mapped_column(String, nullable=True)  # operator identity (audit trail)
+    reviewed_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+
 
 class AnalyticsSnapshot(Base):
+    """
+    Spec §8.3: time series of pulls per inventory_item — never an overwrite.
+    Explicit metric columns rather than a generic JSON blob so they can be queried.
+    """
     __tablename__ = "analytics_snapshots"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    entity_id: Mapped[str] = mapped_column(String) # Channel or InventoryItem (polymorphic)
-    entity_type: Mapped[str] = mapped_column(String) # 'channel', 'clip'
-    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
-    recorded_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    inventory_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("inventory_items.id"))
+    captured_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    views: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    likes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    comments: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    avg_view_duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ctr: Mapped[float | None] = mapped_column(Float, nullable=True)
+    subscribers_delta: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class Job(Base):
+    """
+    Spec §8.3: flat job table backing the state machine in §7.4.
+    last_heartbeat_at backs the liveness mechanism in §12.1.
+    """
+    __tablename__ = "jobs"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    type: Mapped[str] = mapped_column(String, nullable=False)  # spec uses 'type', not 'job_type'
+    status: Mapped[str] = mapped_column(
+        String, default="queued"
+    )  # queued | running | succeeded | failed | retrying | dead_letter | cancelled
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    priority: Mapped[int] = mapped_column(Integer, default=5)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    channel_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("channels.id"), nullable=True)
+    trace_id: Mapped[str] = mapped_column(String, index=True)
+    last_heartbeat_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)  # spec §12.1
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    started_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Model(Base):
+    """Spec §8.3: model registry behind the Model Runtime Manager (§12.9)."""
+    __tablename__ = "models"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    task: Mapped[str] = mapped_column(String)  # e.g. 'scoring', 'transcription', 'vision'
+    backend: Mapped[str] = mapped_column(String)  # e.g. 'vulkan', 'faster-whisper', 'cpu'
+    version: Mapped[str] = mapped_column(String)
+    resource_profile: Mapped[dict] = mapped_column(JSON, default=dict)  # ram_mb, vram_mb, quantization
+    status: Mapped[str] = mapped_column(String, default="active")  # active | deprecated
+
+
+class EvalRun(Base):
+    """Spec §8.3: one row per evaluation pass — what the promotion gate (§18.1) checks."""
+    __tablename__ = "eval_runs"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    model_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("models.id"), nullable=True)
+    benchmark_set_version: Mapped[str] = mapped_column(String)  # e.g. 'v1'
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)  # precision_at_5, human_agreement_rate, etc.
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+
+
+class SystemEvent(Base):
+    """Spec §8.3: append-only event log. Every event carries the job's trace_id (§7.3)."""
+    __tablename__ = "system_events"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    event_type: Mapped[str] = mapped_column(String)  # e.g. 'video.discovered', 'clip.candidates.scored'
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    trace_id: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())

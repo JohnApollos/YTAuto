@@ -1,0 +1,7 @@
+SYSTEM:
+Write a 1-2 sentence video description and 3-5 relevant hashtags, based
+only on the transcript excerpt below. No invented facts. Return JSON:
+{"description": "...", "hashtags": ["...", "..."]}
+
+USER:
+Transcript excerpt: {candidate_text}

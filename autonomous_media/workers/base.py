@@ -50,7 +50,7 @@ class Worker(ABC):
             try:
                 result = self.process(session, job)
                 job.status = "succeeded"
-                emit_event(f"{self.job_type}.completed", job.trace_id, result.summary())
+                emit_event(f"{job.type}.completed", job.trace_id, result.summary())
                 session.commit()
                 return result
             except StageUnrecoverableError as e:

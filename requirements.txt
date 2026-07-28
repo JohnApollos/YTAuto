@@ -1,18 +1,56 @@
+# Core framework
 fastapi>=0.100.0
 uvicorn[standard]>=0.22.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
+
+# Database
 sqlalchemy>=2.0.0
 alembic>=1.11.0
 psycopg2-binary>=2.9.0
 pgvector>=0.2.0
+
+# Cache & queue
 redis>=5.0.0
+
+# Object storage
 minio>=7.1.0
+
+# Auth & security
 python-jose[cryptography]>=3.3.0
 passlib[argon2]>=1.7.4
 argon2-cffi>=23.1.0
+
+# Observability
 prometheus-client>=0.17.0
 prometheus-fastapi-instrumentator>=6.1.0
+
+# HTTP client
 httpx>=0.24.1
+
+# --- Phase 1 AI/media dependencies ---
+# Video download (spec §12.2, §25.4)
+yt-dlp>=2024.1.0
+
+# Audio/video processing (spec §12.7, §20.1)
+ffmpeg-python>=0.2.0
+
+# Transcription — spec §12.3, §25.4
+faster-whisper>=1.0.0
+
+# Speaker/face tracking — spec §12.5, §25.4
+mediapipe>=0.10.0
+
+# OCR — spec §12.5, §25.4
+paddlepaddle>=2.5.0
+paddleocr>=2.7.0
+
+# Speaker diarization — spec §12.3, §25.4
+pyannote.audio>=3.1.0
+
+# Voice activity detection — spec §12.3, §25.4
+silero-vad>=4.0.0
+
+# --- Testing ---
 pytest>=7.4.0
 pytest-asyncio>=0.21.0

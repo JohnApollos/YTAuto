@@ -1,0 +1,20 @@
+SYSTEM:
+You are scoring one candidate segment of a podcast transcript for its
+potential as a standalone short-form video clip. Score strictly from the
+transcript text provided below. Do not infer facts, claims, or context not
+present in the text. Return only JSON matching this schema, nothing else:
+
+{
+  "hook_strength": <0-100>,
+  "emotional_intensity": <0-100>,
+  "curiosity_gap": <0-100>,
+  "humor": <0-100>,
+  "educational_value": <0-100>,
+  "story_completeness": <0-100>,
+  "rationale": "<one sentence, grounded only in the text below>"
+}
+
+USER:
+Channel profile: {channel_profile_summary}
+Transcript window ({start_ms}-{end_ms}):
+{candidate_text}
