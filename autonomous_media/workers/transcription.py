@@ -1,10 +1,134 @@
-from autonomous_media.workers.base import Worker, JobResult
+import os
+import json
+import uuid
+import tempfile
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from autonomous_media.db.models import Job
+from autonomous_media.workers.base import Worker, JobResult
+from autonomous_media.db.models import Job, SourceVideo, Transcript
+from autonomous_media.storage import download_file, put_object_data
+from autonomous_media.logging import get_logger, emit_event
+from autonomous_media.exceptions import StageUnrecoverableError
+
+logger = get_logger("workers.transcription")
 
 class TranscriptionWorker(Worker):
     job_type = 'transcription'
 
     def process(self, session: Session, job: Job) -> JobResult:
-        # Stub implementation
+        from faster_whisper import WhisperModel
+        source_video_id = job.payload.get("source_video_id")
+        if not source_video_id:
+            raise StageUnrecoverableError("Missing source_video_id in job payload")
+
+        source_video = session.query(SourceVideo).filter(SourceVideo.id == source_video_id).first()
+        if not source_video:
+            raise StageUnrecoverableError(f"SourceVideo {source_video_id} not found")
+
+        logger.info(
+            f"Starting transcription for source_video {source_video_id}",
+            extra={"trace_id": job.trace_id}
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_filename = f"{source_video_id}_audio.wav"
+            audio_path = os.path.join(temp_dir, audio_filename)
+
+            # 1. Fetch audio.wav from MinIO
+            audio_storage_key = f"raw/{source_video_id}/audio.wav"
+            try:
+                download_file("autonomous-media-raw", audio_storage_key, audio_path)
+            except Exception as e:
+                raise StageUnrecoverableError(f"Failed to download audio from MinIO: {e}")
+
+            if not os.path.exists(audio_path):
+                raise StageUnrecoverableError(f"Downloaded audio file not found at {audio_path}")
+
+            # 2. Run faster-whisper (device="cpu", compute_type="int8" for CPU fallback/testing/Windows constraints)
+            try:
+                # spec §12.3 Whisper Large-v3-Turbo
+                model = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8")
+                segments, info = model.transcribe(audio_path, word_timestamps=True)
+                
+                # We convert segments to list immediately to trigger lazy evaluation and execute transcription
+                segments = list(segments)
+            except Exception as e:
+                raise StageUnrecoverableError(f"faster-whisper transcription failed: {e}")
+
+            # 3. Build the transcript JSON
+            words_list = []
+            word_count = 0
+            for seg in segments:
+                if seg.words:
+                    for w in seg.words:
+                        words_list.append({
+                            "word": w.word,
+                            "start_ms": int(w.start * 1000),
+                            "end_ms": int(w.end * 1000)
+                        })
+                        word_count += 1
+
+            transcript_id = uuid.uuid4()
+            transcript_json = json.dumps(words_list, indent=2)
+            transcript_bytes = transcript_json.encode("utf-8")
+
+            # 4. Write JSON to MinIO transcripts/{transcript_id}.json
+            transcript_storage_key = f"transcripts/{transcript_id}.json"
+            try:
+                # Use raw bucket for transcripts as per design
+                put_object_data(
+                    "autonomous-media-raw",
+                    transcript_storage_key,
+                    transcript_bytes,
+                    content_type="application/json"
+                )
+            except Exception as e:
+                raise StageUnrecoverableError(f"Failed to upload transcript to MinIO: {e}")
+
+            # 5. Create Transcript row
+            transcript = Transcript(
+                id=transcript_id,
+                source_video_id=source_video_id,
+                engine="whisper-large-v3-turbo",
+                language=info.language,
+                storage_key=transcript_storage_key,
+                word_count=word_count,
+                created_at=datetime.now(timezone.utc)
+            )
+            session.add(transcript)
+            session.flush()
+
+            # Mark SourceVideo as transcribed
+            source_video.status = "transcribed"
+            session.commit()
+
+            # 6. Emit TRANSCRIPT_READY event
+            emit_event(
+                event_type="transcript.ready",
+                trace_id=job.trace_id,
+                payload={
+                    "transcript_id": str(transcript_id),
+                    "source_video_id": str(source_video_id),
+                    "word_count": word_count
+                }
+            )
+
+            # 7. Enqueue intelligence job
+            next_job = Job(
+                type="intelligence",
+                payload={"transcript_id": str(transcript_id)},
+                trace_id=job.trace_id,
+                channel_id=job.channel_id,
+                priority=job.priority,
+                attempts=0,
+                max_attempts=3
+            )
+            session.add(next_job)
+            session.commit()
+
+            logger.info(
+                f"Successfully completed transcription for video {source_video_id}, word count: {word_count}",
+                extra={"trace_id": job.trace_id}
+            )
+
         return JobResult()
