@@ -1,7 +1,8 @@
 import uuid
-from sqlalchemy import String, Text, Enum, ForeignKey, DateTime, Integer, JSON, Boolean, Float
+from sqlalchemy import String, Text, Enum, ForeignKey, DateTime, Integer, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from pgvector.sqlalchemy import Vector
 from autonomous_media.db.base import Base
 
@@ -20,12 +21,9 @@ class Channel(Base):
     music_profile: Mapped[str] = mapped_column(String)
     branding: Mapped[dict] = mapped_column(JSON, default=dict)
     upload_cadence: Mapped[dict] = mapped_column(JSON, default=dict)
-    allowed_content_types: Mapped[list[str]] = mapped_column(JSON, default=list) # Array equivalent in SQLite/JSON
+    allowed_content_types: Mapped[list[str]] = mapped_column(JSON, default=list) # SQLite fallback for array
     created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    content_sources: Mapped[list["ContentSource"]] = relationship(back_populates="channel")
-
 
 class ContentSource(Base):
     __tablename__ = "content_sources"
@@ -36,10 +34,6 @@ class ContentSource(Base):
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_polled_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
-
-    channel: Mapped["Channel"] = relationship(back_populates="content_sources")
-    source_videos: Mapped[list["SourceVideo"]] = relationship(back_populates="content_source")
-
 
 class SourceVideo(Base):
     __tablename__ = "source_videos"
@@ -55,8 +49,13 @@ class SourceVideo(Base):
     storage_key: Mapped[str | None] = mapped_column(String, nullable=True)
     checksum_sha256: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    content_source: Mapped["ContentSource"] = relationship(back_populates="source_videos")
-
+class Transcript(Base):
+    __tablename__ = "transcripts"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    source_video_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_videos.id"))
+    text: Mapped[str] = mapped_column(Text)
+    segments: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
 
 class Topic(Base):
     __tablename__ = "topics"
@@ -66,101 +65,34 @@ class Topic(Base):
     created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
 
 class CandidateClip(Base):
-    __tablename__ = "candidate_clips"
+    __tablename__ = "clip_candidates"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     source_video_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_videos.id"))
     topic_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("topics.id"), nullable=True)
     start_time_s: Mapped[int] = mapped_column(Integer)
     end_time_s: Mapped[int] = mapped_column(Integer)
     transcript_text: Mapped[str] = mapped_column(Text)
+    scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="pending")
     created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
 
-    source_video: Mapped["SourceVideo"] = relationship()
-    topic: Mapped["Topic"] = relationship()
-    evaluation_score: Mapped["EvaluationScore"] = relationship(back_populates="candidate_clip", uselist=False)
-
-class EvaluationScore(Base):
-    __tablename__ = "evaluation_scores"
+class Clip(Base):
+    __tablename__ = "clips"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    candidate_clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("candidate_clips.id"), unique=True)
-    hook_score: Mapped[int] = mapped_column(Integer) # 1-10
-    virality_score: Mapped[int] = mapped_column(Integer) # 1-10
-    coherence_score: Mapped[int] = mapped_column(Integer) # 1-10
-    total_score: Mapped[int] = mapped_column(Integer) # Sum or weighted average
-    llm_reasoning: Mapped[str] = mapped_column(Text)
-    model_version: Mapped[str] = mapped_column(String)
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
-
-    candidate_clip: Mapped["CandidateClip"] = relationship(back_populates="evaluation_score")
-
-class RenderedAsset(Base):
-    __tablename__ = "rendered_assets"
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    candidate_clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("candidate_clips.id"), unique=True)
+    clip_candidate_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clip_candidates.id"))
     storage_key: Mapped[str] = mapped_column(String)
-    status: Mapped[str] = mapped_column(
-        Enum("pending", "rendering", "completed", "failed", name="render_status"),
-        default="pending",
-    )
-    duration_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_s: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String, default="pending")
     created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
 
-    candidate_clip: Mapped["CandidateClip"] = relationship()
-    published_asset: Mapped["PublishedAsset"] = relationship(back_populates="rendered_asset", uselist=False)
-
-class PublishedAsset(Base):
-    __tablename__ = "published_assets"
+class Job(Base):
+    __tablename__ = "jobs"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    rendered_asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rendered_assets.id"), unique=True)
-    youtube_video_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_id: Mapped[str] = mapped_column(String) # polymorphic ID
+    job_type: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum("pending", "uploading", "published", "failed", "deferred", name="publish_status"),
-        default="pending",
-    )
-    published_at: Mapped["DateTime"] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
-
-    rendered_asset: Mapped["RenderedAsset"] = relationship(back_populates="published_asset")
-
-
-class Workflow(Base):
-    __tablename__ = "workflows"
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String, nullable=False) # e.g. "Podcast #391"
-    target_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("source_videos.id"), nullable=True)
-    status: Mapped[str] = mapped_column(
-        Enum("pending", "running", "completed", "failed", "cancelled", name="workflow_status"),
-        default="pending",
-    )
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    stages: Mapped[list["WorkflowStage"]] = relationship(back_populates="workflow")
-
-class WorkflowStage(Base):
-    __tablename__ = "workflow_stages"
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    workflow_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflows.id"))
-    name: Mapped[str] = mapped_column(String, nullable=False) # e.g. "Download", "Transcribe"
-    order: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(
-        Enum("pending", "running", "completed", "failed", "skipped", name="stage_status"),
-        default="pending",
-    )
-    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    workflow: Mapped["Workflow"] = relationship(back_populates="stages")
-    tasks: Mapped[list["Task"]] = relationship(back_populates="stage")
-
-class Task(Base):
-    __tablename__ = "tasks"
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    stage_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflow_stages.id"))
-    task_type: Mapped[str] = mapped_column(String, nullable=False)
-    status: Mapped[str] = mapped_column(
-        Enum("queued", "running", "succeeded", "failed", "retrying", "dead_letter", "cancelled",
-             name="task_status"),
+        String,
         default="queued",
     )
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -174,4 +106,29 @@ class Task(Base):
     started_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
 
-    stage: Mapped["WorkflowStage"] = relationship(back_populates="tasks")
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id"))
+    channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"))
+    status: Mapped[str] = mapped_column(String, default="available") # available, published, rejected
+    scheduled_for: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    published_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    platform_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+
+class RightsRecord(Base):
+    __tablename__ = "rights_records"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    source_video_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_videos.id"))
+    status: Mapped[str] = mapped_column(String, default="pending") # pending, cleared, flagged
+    flag_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    cleared_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+
+class AnalyticsSnapshot(Base):
+    __tablename__ = "analytics_snapshots"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    entity_id: Mapped[str] = mapped_column(String) # Channel or InventoryItem (polymorphic)
+    entity_type: Mapped[str] = mapped_column(String) # 'channel', 'clip'
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    recorded_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
