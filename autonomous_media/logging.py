@@ -28,6 +28,20 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 def emit_event(event_type: str, trace_id: str, payload: dict):
-    # Stub for event emission to Redis Streams / System Events
+    from autonomous_media.db.session import SessionLocal
+    from autonomous_media.db.models import SystemEvent
+    
     logger = get_logger("event_bus")
     logger.info(f"Event {event_type} emitted", extra={"trace_id": trace_id, "payload": payload})
+    
+    try:
+        with SessionLocal() as session:
+            evt = SystemEvent(
+                event_type=event_type,
+                trace_id=trace_id,
+                payload=payload
+            )
+            session.add(evt)
+            session.commit()
+    except Exception as e:
+        logger.error(f"Failed to write SystemEvent to DB: {e}", extra={"trace_id": trace_id})
