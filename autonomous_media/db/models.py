@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from sqlalchemy import String, Text, Enum as SAEnum, ForeignKey, DateTime, Integer, JSON, Boolean, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -22,8 +23,8 @@ class Channel(Base):
     branding: Mapped[dict] = mapped_column(JSON, default=dict)
     upload_cadence: Mapped[dict] = mapped_column(JSON, default=dict)
     allowed_content_types: Mapped[list] = mapped_column(JSON, default=list)
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class ContentSource(Base):
@@ -34,7 +35,7 @@ class ContentSource(Base):
     external_ref: Mapped[str] = mapped_column(String)
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_polled_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    last_polled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class SourceVideo(Base):
@@ -44,8 +45,8 @@ class SourceVideo(Base):
     external_video_id: Mapped[str] = mapped_column(String)
     title: Mapped[str] = mapped_column(String)
     url: Mapped[str] = mapped_column(String)
-    published_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
-    downloaded_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    downloaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     duration_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String, default="pending")
     storage_key: Mapped[str | None] = mapped_column(String, nullable=True)  # MinIO key for raw video
@@ -61,7 +62,7 @@ class Transcript(Base):
     language: Mapped[str] = mapped_column(String, default="en")
     storage_key: Mapped[str | None] = mapped_column(String, nullable=True)  # MinIO pointer to full JSON
     word_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class Topic(Base):
@@ -69,7 +70,7 @@ class Topic(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     label: Mapped[str] = mapped_column(String)
     embedding: Mapped[list] = mapped_column(Vector(768))  # dimension must match embedding model output
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class ClipCandidate(Base):
@@ -82,7 +83,7 @@ class ClipCandidate(Base):
     scores: Mapped[dict] = mapped_column(JSON, default=dict)
     rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String, default="pending")  # pending | selected | rejected
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class Clip(Base):
@@ -95,7 +96,7 @@ class Clip(Base):
     duration_s: Mapped[int] = mapped_column(Integer)
     caption_style: Mapped[str | None] = mapped_column(String, nullable=True)  # spec §8.3
     status: Mapped[str] = mapped_column(String, default="rendering")  # rendering | qc_passed | qc_failed | ready
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class InventoryItem(Base):
@@ -104,11 +105,11 @@ class InventoryItem(Base):
     clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id"))
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"))
     status: Mapped[str] = mapped_column(String, default="ready")  # ready | scheduled | published | rejected | archived
-    scheduled_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)  # spec §8.3 field name
-    published_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # spec §8.3 field name
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     external_video_id: Mapped[str | None] = mapped_column(String, nullable=True)  # YouTube video ID after upload
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class RightsRecord(Base):
@@ -125,8 +126,8 @@ class RightsRecord(Base):
     )  # owned | licensed | permission_granted | unknown | denied
     evidence_ref: Mapped[str | None] = mapped_column(Text, nullable=True)  # URL or document reference
     reviewed_by: Mapped[str | None] = mapped_column(String, nullable=True)  # operator identity (audit trail)
-    reviewed_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
-    expires_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class AnalyticsSnapshot(Base):
@@ -137,7 +138,7 @@ class AnalyticsSnapshot(Base):
     __tablename__ = "analytics_snapshots"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     inventory_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("inventory_items.id"))
-    captured_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    captured_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     views: Mapped[int | None] = mapped_column(Integer, nullable=True)
     likes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     comments: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -164,11 +165,11 @@ class Job(Base):
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
     channel_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("channels.id"), nullable=True)
     trace_id: Mapped[str] = mapped_column(String, index=True)
-    last_heartbeat_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)  # spec §12.1
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # spec §12.1
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
-    started_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Model(Base):
@@ -190,7 +191,7 @@ class EvalRun(Base):
     model_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("models.id"), nullable=True)
     benchmark_set_version: Mapped[str] = mapped_column(String)  # e.g. 'v1'
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)  # precision_at_5, human_agreement_rate, etc.
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class SystemEvent(Base):
@@ -200,4 +201,4 @@ class SystemEvent(Base):
     event_type: Mapped[str] = mapped_column(String)  # e.g. 'video.discovered', 'clip.candidates.scored'
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     trace_id: Mapped[str] = mapped_column(String, index=True)
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

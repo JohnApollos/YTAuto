@@ -29,30 +29,58 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ---- clip_candidates: ms precision ----
-    op.add_column('clip_candidates', sa.Column('start_ms', sa.Integer(), nullable=True))
-    op.add_column('clip_candidates', sa.Column('end_ms', sa.Integer(), nullable=True))
-    op.execute("UPDATE clip_candidates SET start_ms = start_time_s * 1000, end_ms = end_time_s * 1000")
-    op.alter_column('clip_candidates', 'start_ms', nullable=False)
-    op.alter_column('clip_candidates', 'end_ms', nullable=False)
-    op.drop_column('clip_candidates', 'start_time_s')
-    op.drop_column('clip_candidates', 'end_time_s')
-    op.drop_column('clip_candidates', 'transcript_text')  # stored in MinIO via transcript.storage_key
+    # Drop referencing tables first to avoid FK constraint errors
+    op.drop_table('inventory_items')
+    op.drop_table('clips')
+    op.drop_table('clip_candidates')
 
-    # ---- clips: add channel_id, thumbnail_key, caption_style ----
-    op.add_column('clips', sa.Column('channel_id', sa.Uuid(), nullable=True))
-    op.add_column('clips', sa.Column('thumbnail_key', sa.String(), nullable=True))
-    op.add_column('clips', sa.Column('caption_style', sa.String(), nullable=True))
-    op.create_foreign_key('fk_clips_channel_id', 'clips', 'channels', ['channel_id'], ['id'])
+    # Recreate clip_candidates with correct spec schema
+    op.create_table('clip_candidates',
+        sa.Column('id', sa.Uuid(), nullable=False),
+        sa.Column('source_video_id', sa.Uuid(), nullable=False),
+        sa.Column('topic_id', sa.Uuid(), nullable=True),
+        sa.Column('start_ms', sa.Integer(), nullable=False),
+        sa.Column('end_ms', sa.Integer(), nullable=False),
+        sa.Column('scores', sa.JSON(), nullable=False),
+        sa.Column('rank', sa.Integer(), nullable=True),
+        sa.Column('status', sa.String(), nullable=False, server_default='pending'),
+        sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+        sa.ForeignKeyConstraint(['source_video_id'], ['source_videos.id']),
+        sa.ForeignKeyConstraint(['topic_id'], ['topics.id']),
+        sa.PrimaryKeyConstraint('id')
+    )
 
-    # ---- inventory_items: fix field names + add updated_at ----
-    op.add_column('inventory_items', sa.Column('scheduled_at', sa.DateTime(), nullable=True))
-    op.add_column('inventory_items', sa.Column('external_video_id', sa.String(), nullable=True))
-    op.add_column('inventory_items', sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False))
-    op.execute("UPDATE inventory_items SET scheduled_at = scheduled_for")
-    op.execute("UPDATE inventory_items SET external_video_id = platform_ref")
-    op.drop_column('inventory_items', 'scheduled_for')
-    op.drop_column('inventory_items', 'platform_ref')
+    # Recreate clips with correct spec schema
+    op.create_table('clips',
+        sa.Column('id', sa.Uuid(), nullable=False),
+        sa.Column('clip_candidate_id', sa.Uuid(), nullable=False),
+        sa.Column('channel_id', sa.Uuid(), nullable=False),
+        sa.Column('storage_key', sa.String(), nullable=False),
+        sa.Column('thumbnail_key', sa.String(), nullable=True),
+        sa.Column('duration_s', sa.Integer(), nullable=False),
+        sa.Column('caption_style', sa.String(), nullable=True),
+        sa.Column('status', sa.String(), nullable=False, server_default='rendering'),
+        sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+        sa.ForeignKeyConstraint(['clip_candidate_id'], ['clip_candidates.id']),
+        sa.ForeignKeyConstraint(['channel_id'], ['channels.id']),
+        sa.PrimaryKeyConstraint('id')
+    )
+
+    # Recreate inventory_items with correct spec schema
+    op.create_table('inventory_items',
+        sa.Column('id', sa.Uuid(), nullable=False),
+        sa.Column('clip_id', sa.Uuid(), nullable=False),
+        sa.Column('channel_id', sa.Uuid(), nullable=False),
+        sa.Column('status', sa.String(), nullable=False, server_default='ready'),
+        sa.Column('scheduled_at', sa.DateTime(), nullable=True),
+        sa.Column('published_at', sa.DateTime(), nullable=True),
+        sa.Column('external_video_id', sa.String(), nullable=True),
+        sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+        sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+        sa.ForeignKeyConstraint(['channel_id'], ['channels.id']),
+        sa.ForeignKeyConstraint(['clip_id'], ['clips.id']),
+        sa.PrimaryKeyConstraint('id')
+    )
 
     # ---- rights_records: full redesign ----
     # Drop old table and recreate with correct schema
