@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+transcripts/
+renders/
+raw/
+dashboard/node_modules/
+dashboard/dist/
+
+frontend/node_modules/
+frontend/dist/
+*.db
+client_secrets.json
+token.json

@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Roboto", "Helvetica Neue", sans-serif;
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed;
+  --color-brand-900: #4c1d95;
+}
+
+body {
+  @apply bg-gray-900 text-gray-100;
+}
