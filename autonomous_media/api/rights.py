@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from autonomous_media.db.session import get_db
 from autonomous_media.db.models import RightsRecord, ContentSource, SystemEvent
+from autonomous_media.events import RIGHTS_STATUS_UPDATED
 
 router = APIRouter(prefix="/rights", tags=["Rights"])
 
@@ -84,7 +85,7 @@ def update_rights_status(source_id: str, body: RightsUpdate, db: Session = Depen
     # Create audit event SystemEvent matching RightsGate
     event = SystemEvent(
         id=uuid.uuid4(),
-        event_type="rights.status.updated",
+        event_type=RIGHTS_STATUS_UPDATED,
         payload={
             "content_source_id": source_id,
             "new_status": body.status,
