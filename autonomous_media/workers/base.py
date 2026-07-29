@@ -2,7 +2,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from autonomous_media.db.models import Job
-from autonomous_media.exceptions import StageUnrecoverableError
+from autonomous_media.exceptions import StageUnrecoverableError, QuotaExceededError
 from autonomous_media.logging import emit_event
 from sqlalchemy.orm import Session
 
@@ -56,6 +56,22 @@ class Worker(ABC):
             except StageUnrecoverableError as e:
                 job.status = "dead_letter"
                 job.error = str(e)
+                session.commit()
+                raise
+            except QuotaExceededError as e:
+                from zoneinfo import ZoneInfo
+                from datetime import datetime, time as dt_time, timedelta, timezone
+                
+                # Compute next midnight Pacific
+                pacific = ZoneInfo("America/Los_Angeles")
+                now_pacific = datetime.now(pacific)
+                tomorrow_pacific = now_pacific + timedelta(days=1)
+                midnight_pacific = datetime.combine(tomorrow_pacific.date(), dt_time.min, tzinfo=pacific)
+                next_midnight_utc = midnight_pacific.astimezone(timezone.utc)
+                
+                job.scheduled_at = next_midnight_utc
+                job.status = "retrying"
+                job.error = f"QuotaExceededError: deferred until midnight Pacific. Details: {e}"
                 session.commit()
                 raise
             except Exception as e:

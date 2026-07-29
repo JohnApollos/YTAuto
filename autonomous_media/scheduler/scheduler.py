@@ -55,15 +55,22 @@ class Scheduler:
 
     def _poll(self):
         """Dispatch queued jobs up to max_concurrent_jobs."""
+        from sqlalchemy import or_
+        from datetime import datetime, timezone
+        
         with self.session_maker() as session:
             running_count = session.query(Job).filter(Job.status == "running").count()
             slots = max(0, self.max_concurrent_jobs - running_count)
             if slots == 0:
                 return
 
+            now_utc = datetime.now(timezone.utc)
             queued = (
                 session.query(Job)
-                .filter(Job.status.in_(["queued", "retrying"]))
+                .filter(
+                    Job.status.in_(["queued", "retrying"]),
+                    or_(Job.scheduled_at.is_(None), Job.scheduled_at <= now_utc)
+                )
                 .order_by(Job.priority.desc(), Job.created_at)
                 .limit(slots)
                 .all()
