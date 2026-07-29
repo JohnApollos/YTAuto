@@ -44,6 +44,29 @@ class TranscriptionWorker(Worker):
             if not os.path.exists(audio_path):
                 raise StageUnrecoverableError(f"Downloaded audio file not found at {audio_path}")
 
+            # Verify audio format contract via ffmpeg probe
+            try:
+                import ffmpeg
+                probe = ffmpeg.probe(audio_path)
+                audio_stream = next((stream for stream in probe.get('streams', []) if stream.get('codec_type') == 'audio'), None)
+                if audio_stream:
+                    sample_rate = int(audio_stream.get('sample_rate', 0))
+                    channels = int(audio_stream.get('channels', 0))
+                    logger.info(
+                        f"Audio probe results: sample_rate={sample_rate}Hz, channels={channels}",
+                        extra={"trace_id": job.trace_id}
+                    )
+                    if sample_rate != 16000 or channels != 1:
+                        logger.warning(
+                            f"Audio format contract mismatch: expected 16kHz mono (sample_rate=16000, channels=1), "
+                            f"got {sample_rate}Hz with {channels} channels.",
+                            extra={"trace_id": job.trace_id}
+                        )
+                else:
+                    logger.warning("ffmpeg probe failed to find audio stream", extra={"trace_id": job.trace_id})
+            except Exception as e:
+                logger.warning(f"ffmpeg probe failed on {audio_path}: {e}", extra={"trace_id": job.trace_id})
+
             # 2. Run faster-whisper (device="cpu", compute_type="int8" for CPU fallback/testing/Windows constraints)
             try:
                 # spec §12.3 Whisper Large-v3-Turbo
