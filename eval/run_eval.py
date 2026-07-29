@@ -13,9 +13,11 @@ The development slice (40 episodes) is used during iteration.
 The hold-out slice (10 episodes) is ONLY touched immediately before a
 promotion decision — never during tuning.
 """
+import os
 import json
 import sys
 from pathlib import Path
+from autonomous_media.runtime.manager import stage_manager, InferenceRequest
 
 
 DEV_BENCHMARK = Path(__file__).parent / "benchmark_dev_v1.jsonl"
@@ -49,11 +51,54 @@ def run_eval(benchmark_path: Path, model_version: str = "stub") -> dict:
         print("No benchmark episodes loaded. Label some episodes first (spec §25.9).")
         return {}
 
+    # Load scoring prompt template
+    prompt_path = Path(__file__).parent.parent / "autonomous_media" / "prompts" / "scoring_v3.txt"
+    try:
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            prompt_template = f.read()
+    except Exception as e:
+        print(f"[ERROR] Failed to load scoring prompt template: {e}")
+        return {}
+
     precision_scores = []
     for episode in episodes:
         labeled_good = episode.get("labeled_good_clip_ids", [])
-        # STUB: replace with real scoring call through StageModelManager
-        predicted = episode.get("candidate_ids", [])[:5]
+        candidates = episode.get("candidates", [])
+        
+        scored_candidates = []
+        for cand in candidates:
+            # Format prompt template
+            prompt = (
+                prompt_template
+                .replace("{channel_profile_summary}", "Niche: Tech and Startups podcast")
+                .replace("{start_ms}", "0")
+                .replace("{end_ms}", "0")
+                .replace("{candidate_text}", cand["text"])
+            )
+            
+            # Call real StageModelManager scoring
+            try:
+                res = stage_manager.run_stage("scoring", InferenceRequest(prompt=prompt))
+                scores = json.loads(res.text)
+            except Exception as e:
+                print(f"[WARN] Failed to score candidate {cand['id']}: {e}")
+                scores = {}
+                
+            # Compute composite score using the same formula
+            weighted_score = (
+                scores.get("hook_strength", 0) * 1.0 +
+                scores.get("emotional_intensity", 0) * 1.0 +
+                scores.get("curiosity_gap", 0) * 1.0 +
+                scores.get("humor", 0) * 0.7 +
+                scores.get("educational_value", 0) * 1.0 +
+                scores.get("story_completeness", 0) * 0.8
+            )
+            scored_candidates.append((cand["id"], weighted_score))
+            
+        # Sort candidates descending by score and pick top 5
+        scored_candidates.sort(key=lambda x: x[1], reverse=True)
+        predicted = [cand_id for cand_id, _ in scored_candidates][:5]
+        
         p_at_5 = compute_precision_at_k(predicted, labeled_good, k=5)
         precision_scores.append(p_at_5)
 
