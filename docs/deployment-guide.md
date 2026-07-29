@@ -488,3 +488,367 @@ For incident response during operation, see [`docs/runbook.md`](runbook.md). The
 | `NoSuchBucket` on first worker run | Run the MinIO bucket creation commands from Part 8 |
 | YouTube API `403 accessNotConfigured` | YouTube Data API v3 is not enabled in the Google Cloud project — enable it in APIs & Services → Library |
 | YouTube API `401 invalid_grant` | OAuth refresh token expired (Testing app, 7-day limit) — re-authenticate via the Dashboard or promote the app to "In production" |
+
+---
+
+## Part 15 — Keeping the Codebase Synced (git pull Workflow)
+
+The dev machine and the target (production) machine share the same repository on GitHub. All code changes are authored on the dev machine and pushed to GitHub; the production machine pulls them down. Never edit code directly on the production machine.
+
+### 15.1 Standard Update Procedure
+
+Run this sequence on the **production machine** whenever deploying a new version:
+
+```powershell
+# 1. Activate the virtual environment (if not already active)
+.\.venv\Scripts\Activate.ps1
+
+# 2. Pull the latest changes from GitHub
+git fetch origin
+git status          # check for any unexpected local modifications — there should be none
+
+git pull origin master   # or main, whichever is the default branch
+
+# 3. Install any new Python dependencies
+pip install -r requirements.txt
+
+# 4. Check if there are new Alembic migrations
+#    If new migration files appear under autonomous_media/db/migrations/versions/, run:
+alembic upgrade head
+
+# 5. Rebuild Docker images if docker-compose.yml or any Dockerfile changed
+#    (git diff HEAD~1 docker-compose.yml to check)
+docker compose build
+
+# 6. Restart all services to pick up the new code
+docker compose down
+docker compose up -d
+
+# 7. Verify the system came back healthy (see Part 16 for full verification)
+curl http://localhost:8000/api/v1/system/health
+```
+
+### 15.2 Before Running `alembic upgrade head` on Real Data
+
+Per spec §15.3 and developer guide §8 — this is mandatory, not optional:
+
+```powershell
+# Backup the database before EVERY migration against real data
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+docker exec autonomous_media_postgres pg_dump -U autonomous autonomous_media `
+  > "backups\db_backup_pre_migration_$timestamp.sql"
+
+# Preview what the migration will execute (dry run — no changes made)
+alembic upgrade head --sql
+
+# Only after reviewing the SQL output and creating the backup:
+alembic upgrade head
+```
+
+### 15.3 Checking What Changed Before Pulling
+
+```powershell
+# See what commits are incoming without applying them
+git fetch origin
+git log HEAD..origin/master --oneline
+
+# See which files changed in those commits
+git diff HEAD origin/master --name-only
+
+# If migrations/ or requirements.txt appear in the diff, those steps are required
+```
+
+### 15.4 Rolling Back a Bad Update
+
+```powershell
+# Revert to the previous commit (keeps changes staged, easy to undo)
+git revert HEAD
+
+# Or hard reset to a specific commit (destructive — local uncommitted changes lost)
+git reset --hard <commit-hash>
+
+# Roll back the Alembic migration (each migration has a downgrade() function)
+alembic downgrade -1
+
+# Restore database from backup if needed
+docker exec -i autonomous_media_postgres psql -U autonomous autonomous_media `
+  < "backups\db_backup_pre_migration_<timestamp>.sql"
+
+# Restart services
+docker compose down
+docker compose up -d
+```
+
+### 15.5 Checking the Currently Deployed Version
+
+```powershell
+# Show the current git commit and tag on the production machine
+git log -1 --format="%H %s %ci"
+git describe --tags --always
+
+# Show the current Alembic migration state
+alembic current
+
+# Show running container image digests
+docker compose ps
+```
+
+---
+
+## Part 16 — System Verification Checklist
+
+Run this after initial deployment, after every `git pull` update, or any time the system is not behaving as expected. Each check is a single command — if it passes, move on; if it fails, the inline note tells you which Part to revisit.
+
+### 16.1 Python Environment
+
+```powershell
+# Verify Python version is 3.11+
+python --version
+# Expected: Python 3.11.x or higher
+
+# Verify virtual environment is active and packages installed
+pip show faster-whisper yt-dlp minio sqlalchemy alembic | Select-String "Name|Version"
+# Expected: all five packages listed with version numbers
+
+# Verify the autonomous_media package itself imports cleanly
+python -c "import autonomous_media; print('Package import: OK')"
+# Expected: "Package import: OK"  — any ImportError means a broken dependency or missing file
+```
+
+**If fails:** re-run `pip install -r requirements.txt`. If errors persist, check Python version and virtual environment activation.
+
+### 16.2 Docker Services
+
+```powershell
+# All three core services must be running and healthy
+docker compose ps
+# Expected: postgres, redis, minio all show "running (healthy)"
+
+# Quick connectivity test for each service
+docker exec autonomous_media_postgres pg_isready -U autonomous
+# Expected: "localhost:5432 - accepting connections"
+
+docker exec autonomous_media_redis redis-cli ping
+# Expected: "PONG"
+
+# MinIO web console should respond
+Invoke-WebRequest -Uri "http://localhost:9001" -UseBasicParsing | Select-Object StatusCode
+# Expected: StatusCode 200
+```
+
+**If fails:** `docker compose up -d`. If still unhealthy after 60 seconds, check `docker compose logs <service>`.
+
+### 16.3 Database & Migrations
+
+```powershell
+# Verify pgvector extension is present
+docker exec autonomous_media_postgres psql -U autonomous autonomous_media `
+  -c "SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';"
+# Expected: one row showing "vector | <version>"
+
+# Verify Alembic is at the latest migration head
+alembic current
+# Expected: last revision hash with "(head)" suffix — no "heads" mismatch
+
+# Verify all 13 core tables exist
+docker exec autonomous_media_postgres psql -U autonomous autonomous_media `
+  -c "\dt"
+# Expected: channels, clip_candidates, clips, content_sources, eval_runs, 
+#           inventory_items, jobs, models, rights_records, source_videos,
+#           system_events, topics, transcripts  — all 13 listed
+```
+
+**If fails:**
+- Missing `vector` extension: see Part 4
+- Migration mismatch: run `alembic upgrade head` (after backup — see Part 15.2)
+- Missing tables: run `alembic upgrade head` from scratch
+
+### 16.4 MinIO Buckets
+
+```powershell
+# All four required buckets must exist
+python -c "
+from minio import Minio
+import os
+from dotenv import load_dotenv
+load_dotenv()
+client = Minio(
+    os.environ['MINIO_ENDPOINT'],
+    access_key=os.environ['MINIO_ACCESS_KEY'],
+    secret_key=os.environ['MINIO_SECRET_KEY'],
+    secure=False
+)
+required = ['autonomous-media-raw','autonomous-media-transcripts','autonomous-media-renders','autonomous-media-branding']
+found = [b.name for b in client.list_buckets()]
+missing = [b for b in required if b not in found]
+print('Buckets OK:', required) if not missing else print('MISSING:', missing)
+"
+# Expected: "Buckets OK: ['autonomous-media-raw', ...]"
+```
+
+**If fails:** run the bucket creation commands from Part 8, or restart the system — `ensure_all_buckets()` runs automatically on startup (Phase 2+).
+
+### 16.5 API Server
+
+```powershell
+# Health endpoint must return HTTP 200
+$response = Invoke-WebRequest -Uri "http://localhost:8000/api/v1/system/health" -UseBasicParsing
+$response.StatusCode
+# Expected: 200
+
+$response.Content
+# Expected: JSON with status "healthy" and all services listed as up
+```
+
+**If fails:** check `docker compose logs api` for the startup error. Most common causes: bad `DATABASE_URL` in `.env`, Postgres not yet healthy, missing migration.
+
+### 16.6 FFmpeg
+
+```powershell
+# FFmpeg must be on PATH and the AMF hardware encoder must be available
+ffmpeg -version 2>&1 | Select-String "^ffmpeg version"
+# Expected: "ffmpeg version N.xxx ..."
+
+ffmpeg -hide_banner -encoders 2>&1 | Select-String "h264_amf"
+# Expected: "V..... h264_amf" — if blank, AMF is unavailable (fall back to libx264; rendering works but is CPU-only)
+
+# Test that ffmpeg can probe a media file (basic sanity check)
+ffprobe -v quiet -print_format json -show_streams "$(python -c "import shutil; print(shutil.which('ffprobe'))")" 2>&1
+# Just checking ffprobe runs without error
+```
+
+**If fails:** add FFmpeg `bin\` directory to `PATH`. See Part 6 of this guide.
+
+### 16.7 Whisper / faster-whisper
+
+```powershell
+# faster-whisper must load without error
+python -c "
+from faster_whisper import WhisperModel
+model = WhisperModel('tiny', device='cpu', compute_type='int8')
+segs, info = model.transcribe('nul', language='en')
+print('faster-whisper: OK')
+" 2>&1 | Select-String "OK|Error|CUDA"
+# Expected: "faster-whisper: OK"
+# Note: 'nul' is the Windows null device — this just checks the library loads
+```
+
+**If fails:** `pip install faster-whisper`. If CUDA errors appear even though you're using CPU, add `CUDA_VISIBLE_DEVICES=` (blank) to `.env` to suppress GPU detection.
+
+### 16.8 llama-server (Vulkan LLM Runtime)
+
+```powershell
+# llama-server must be running and responding on port 8080
+Invoke-WebRequest -Uri "http://localhost:8080/health" -UseBasicParsing | Select-Object StatusCode, Content
+# Expected: StatusCode 200, Content includes "{"status":"ok"}"
+
+# Confirm GPU is being used — send a small inference request while watching Task Manager GPU
+# In a second terminal: watch GPU utilization in Task Manager > Performance > GPU
+$body = '{"model":"qwen3","messages":[{"role":"user","content":"Say: test"}],"max_tokens":5}'
+Invoke-WebRequest -Uri "http://localhost:8080/v1/chat/completions" `
+  -Method Post -ContentType "application/json" -Body $body -UseBasicParsing | `
+  Select-Object StatusCode
+# Expected: StatusCode 200
+# In Task Manager: GPU utilization should spike during this call (non-zero %)
+# If GPU stays at 0%: llama-server is running on CPU — re-download the Vulkan binary (Part 7)
+```
+
+**If fails — server not running:** start `llama-server` manually per Part 7 of this guide. It must be started before any AI-dependent pipeline stage runs.
+
+**If fails — GPU at 0%:** confirm you downloaded the `vulkan` build variant, not the CPU build. Confirm AMD Adrenalin 24.x drivers are installed. Confirm the `.gguf` model file path in your `llama-server` start command is correct.
+
+### 16.9 yt-dlp
+
+```powershell
+# yt-dlp must be on PATH and able to reach YouTube
+yt-dlp --version
+# Expected: a version string like "2025.xx.xx"
+
+# Quick live test — just get video info, no download
+yt-dlp --dump-json "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>&1 | `
+  python -c "import sys,json; d=json.load(sys.stdin); print('yt-dlp live test OK, title:', d['title'])"
+# Expected: "yt-dlp live test OK, title: ..."
+```
+
+**If fails:** `pip install -U yt-dlp`. If network errors: check firewall / proxy settings.
+
+### 16.10 Unit Test Suite
+
+```powershell
+# All 17 unit tests must pass — any failure before you've changed anything means a broken installation
+pytest tests/unit/ -v --tb=short
+# Expected: 17 passed, 0 failed, 0 errors
+```
+
+**If fails:** check the error output for which module is failing to import. Usually indicates a missing dependency (`pip install -r requirements.txt`) or a wrong `DATABASE_URL` (unit tests should not need a live database — if they do, something is importing a DB-dependent module at test collection time).
+
+### 16.11 End-to-End Summary Check
+
+Run all of the above in sequence and get a pass/fail summary:
+
+```powershell
+# Save as scripts/verify.ps1 and run it after every deployment
+$pass = 0; $fail = 0
+
+function Check($label, $cmd) {
+    try {
+        $result = Invoke-Expression $cmd 2>&1
+        if ($LASTEXITCODE -eq 0 -or $result -match "OK|PONG|healthy|passed") {
+            Write-Host "  [PASS] $label" -ForegroundColor Green; $script:pass++
+        } else {
+            Write-Host "  [FAIL] $label" -ForegroundColor Red; Write-Host "         $result" -ForegroundColor DarkRed; $script:fail++
+        }
+    } catch {
+        Write-Host "  [FAIL] $label - Exception: $_" -ForegroundColor Red; $script:fail++
+    }
+}
+
+Write-Host "`nAutonomous Media - System Verification" -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Cyan
+
+Check "Python 3.11+"              'python --version'
+Check "Package import"            'python -c "import autonomous_media; print(\"OK\")"'
+Check "Docker services healthy"   'docker compose ps | Select-String "healthy"'
+Check "Postgres ready"            'docker exec autonomous_media_postgres pg_isready -U autonomous'
+Check "Redis ping"                'docker exec autonomous_media_redis redis-cli ping'
+Check "pgvector extension"        'docker exec autonomous_media_postgres psql -U autonomous autonomous_media -c "SELECT 1 FROM pg_extension WHERE extname=''vector''"'
+Check "Alembic at head"           'alembic current 2>&1 | Select-String "head"'
+Check "API health"                '(Invoke-WebRequest -Uri http://localhost:8000/api/v1/system/health -UseBasicParsing).StatusCode -eq 200'
+Check "FFmpeg on PATH"            'ffmpeg -version'
+Check "faster-whisper import"     'python -c "from faster_whisper import WhisperModel; print(\"OK\")"'
+Check "llama-server health"       '(Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing).StatusCode -eq 200'
+Check "yt-dlp on PATH"            'yt-dlp --version'
+Check "Unit tests (17)"           'pytest tests/unit/ -q --tb=no 2>&1 | Select-String "passed"'
+
+Write-Host "`nResult: $pass passed, $fail failed" -ForegroundColor $(if ($fail -eq 0) {"Green"} else {"Red"})
+if ($fail -eq 0) { Write-Host "System is ready." -ForegroundColor Green }
+else { Write-Host "Fix the failing checks before running the pipeline." -ForegroundColor Yellow }
+```
+
+Run it with:
+```powershell
+.\.venv\Scripts\Activate.ps1
+.\scripts\verify.ps1
+```
+
+**Expected output when everything is healthy:**
+```
+Autonomous Media - System Verification
+=======================================
+  [PASS] Python 3.11+
+  [PASS] Package import
+  [PASS] Docker services healthy
+  [PASS] Postgres ready
+  [PASS] Redis ping
+  [PASS] pgvector extension
+  [PASS] Alembic at head
+  [PASS] API health
+  [PASS] FFmpeg on PATH
+  [PASS] faster-whisper import
+  [PASS] llama-server health
+  [PASS] yt-dlp on PATH
+  [PASS] Unit tests (17)
+
+Result: 13 passed, 0 failed
+System is ready.
+```

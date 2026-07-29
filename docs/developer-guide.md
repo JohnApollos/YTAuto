@@ -1,363 +1,472 @@
 # Autonomous Media — Developer Guide
 
-**Companion to:** `docs/technical-specification.md` (v1.2)
-**Purpose:** The specification defines *what* the system does and *why*. This guide is *how you build it* — in what order, with what conventions, and with what tools.
-**Audience:** Whoever is writing the code. For V1, that is one person.
-**Rule:** If anything in this guide conflicts with the Technical Specification, the spec wins.
+**Companion to:** `autonomous-media-technical-specification.md` (v1.1)
+**Purpose:** the specification defines *what* the system does and *why*; this document is *how you actually build it*, in what order, with what conventions.
+**Audience:** whoever is writing the code — which, for V1, is one person.
 
 ---
 
-## 1. Orientation
+## How to Use This Document
 
-### Where We Are
+Every chapter below assumes the Technical Specification is open in the other tab and does not re-explain decisions already made there — it links to the relevant section (§) and tells you what to actually type, create, or run. If a chapter here ever seems to disagree with the spec, the spec wins; file the discrepancy and fix this document, not the other way around.
 
-Phase 0 (infrastructure, schema, API skeleton, dashboard) is **complete**. A full spec v1.2 compliance audit has been completed — 16 schema/code gaps were found and closed in commit `5d21b02`. All structural contracts are in place. What is **not yet implemented** is the actual pipeline logic inside each worker's `process()` method.
+Chapters, in the order you'll actually use them:
 
-Phase 1 is the next task: make one end-to-end clip, from source poll to `inventory_items` row, work completely with no stubs.
-
-### Development Philosophy
-
-- **One file, one job, one audience.** Every module has a clearly bounded responsibility. Look at the filename, know exactly what lives there.
-- **Stubs are temporary scaffolding, not acceptable architecture.** Every worker's `process()` method currently returns `JobResult()` immediately. Phase 1 replaces them with real logic.
-- **The spec is the arbiter.** If you're unsure what a piece of code should do, open `docs/technical-specification.md` and read the relevant section. Cross-section references in the spec (e.g. §11.3, §12.9) are trustworthy.
-
----
-
-## 2. Project Structure
-
-```
-autonomous_media/
-  api/
-    auth.py          # JWT login/token endpoint
-    channels.py      # Channel CRUD
-    sources.py       # ContentSource management
-    jobs.py          # Job list/get/retry/cancel — spec §9.2
-    clips.py         # Clip list/get/patch (approve/reject) — spec §9.2, §10.1
-    inventory.py     # Inventory item management
-    analytics.py     # Analytics snapshot reads
-    rights.py        # Rights status read/update
-    system.py        # /health, /models (health_check_all), /quota
-    main.py          # FastAPI app: mounts all 9 routers at /api/v1
-  db/
-    base.py          # DeclarativeBase
-    session.py       # SessionMaker factory
-    models.py        # 13 SQLAlchemy models — canonical schema
-    migrations/      # Alembic versions (one migration per spec change)
-  workers/
-    base.py          # Worker ABC, JobResult, heartbeat thread
-    acquisition.py   # Download source video + checksum + MinIO write
-    transcription.py # faster-whisper → timestamped JSON → MinIO
-    intelligence.py  # Candidate window gen + heuristics + LLM scoring + pgvector dedup
-    vision.py        # MediaPipe speaker tracking + Qwen2.5-VL OCR
-    editing.py       # FFmpeg filtergraph construction + caption burn-in
-    rendering.py     # FFmpeg hardware encode (AMF/VCE) + thumbnail
-    quality_gate.py  # QC: black-frame, silence, aspect ratio, duration (spec §12.8)
-    publishing.py    # YouTube videos.insert (quota-aware) — spec §5.1
-    analytics.py     # YouTube Analytics API poll → analytics_snapshots rows
-    learning.py      # Scoring weight update from analytics feedback (spec §23)
-  sources/
-    base.py          # ContentSource Protocol: discover() + fetch()
-    youtube_clip.py  # YouTubeClipSource — the only V1 source implementation
-  runtime/
-    manager.py       # StageModelManager + ModelRuntime Protocol + StubModelRuntime
-  rights/
-    gate.py          # RightsGate: is_cleared, get_status, set_status (audit-logged)
-  scheduler/
-    scheduler.py     # Job poll loop + heartbeat-timeout recovery + dispatch
-  prompts/
-    scoring_v3.txt   # Versioned LLM prompt for clip scoring (spec §25.8)
-    title_v1.txt     # Title generation prompt
-    description_v1.txt
-    grounding_v1.txt # Hallucination-check prompt (spec §12.6)
-  config.py          # Pydantic Settings + ChannelConfig schema
-  exceptions.py      # Typed exception hierarchy
-  events.py          # Canonical event type string constants (spec §7.3)
-  logging.py         # JSON structured logger + emit_event
-  main.py            # Top-level entrypoint for uvicorn
-eval/
-  run_eval.py        # Precision@5 evaluation harness (spec §18.1)
-  benchmark_dev_v1.jsonl    # 40-episode dev slice — label before Phase 2
-  benchmark_holdout_v1.jsonl  # 10-episode hold-out — never touched during tuning
-```
+0. [How to Use This Document](#how-to-use-this-document) *(you are here)*
+1. [Environment Setup](#1-environment-setup)
+2. [Project & Module Structure](#2-project--module-structure)
+3. [Database Setup & Migrations](#3-database-setup--migrations)
+4. [The Worker Framework](#4-the-worker-framework)
+5. [Building Your First Vertical Slice](#5-building-your-first-vertical-slice)
+6. [Testing Conventions](#6-testing-conventions)
+7. [Coding Standards](#7-coding-standards)
+8. [Release Process](#8-release-process)
+9. [How-To Recipes](#9-how-to-recipes)
+10. [Development Milestones](#10-development-milestones)
 
 ---
 
-## 3. Conventions
+## 1. Environment Setup
 
-### Exception Hierarchy
+These steps are Windows-specific, matching the operator's actual machine (spec §13.1).
 
-Always use typed exceptions from `autonomous_media/exceptions.py`:
+1. **Python 3.11+.** The codebase leans on modern typing (`X | None` unions, `Protocol` classes) used throughout the spec's pseudocode — don't go older.
+2. **Docker Desktop, WSL2 backend enabled** (Settings → General → "Use the WSL 2 based engine"). This is materially more efficient than the legacy Hyper-V backend (spec §13.4) and is not the default on every install, so verify it explicitly rather than assuming.
+3. **Clone the repo, create a virtual environment, install dependencies:**
+   ```
+   python -m venv .venv
+   .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+4. **Bring up the stateful services only** (the model runtime stays native on the host — see step 6):
+   ```
+   docker compose up -d postgres redis minio
+   ```
+5. **Enable `pgvector` on the fresh Postgres instance** (needed for the `topics.embedding` column, spec §8.3):
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+6. **Set up the local model runtime — one persistent process, natively on Windows, not in Docker** (spec §13.3). This is the step most likely to silently go wrong, so verify it explicitly rather than assuming it worked:
+   - Obtain or compile a **Vulkan-enabled** `llama.cpp`/`llama-server` build (or, if using Ollama, confirm the specific build in use actually exercises its Vulkan path on this GPU rather than silently falling back to CPU).
+   - Start it **once, as a long-lived process**, not something you launch and kill per pipeline stage — `swap`-mode "unload" (spec §12.9) means telling this already-running server to drop the current model, not stopping the process itself.
+   - Run one test inference and **watch GPU utilization in Task Manager while it runs.** If GPU usage stays flat at 0% during inference, it's running on CPU — that's the exact failure mode spec §13.3 warns about, and it will not announce itself with an error.
+   - Note its port — containerized workers (running in Docker) reach this native host process at `http://host.docker.internal:<port>`, **not** `http://localhost:<port>`, which inside a container resolves to the container itself (spec §13.4).
+   - Whisper and FFmpeg are unaffected by any of this (spec §20.1) — verify them separately and don't let a Vulkan problem block getting transcription working.
+7. **`.env` file** (never committed — add to `.gitignore` immediately, per spec §14.2):
+   ```
+   DATABASE_URL=postgresql://...
+   REDIS_URL=redis://localhost:6379
+   MINIO_ENDPOINT=...
+   MINIO_ACCESS_KEY=...
+   MINIO_SECRET_KEY=...
+   YOUTUBE_OAUTH_CLIENT_ID=...
+   YOUTUBE_OAUTH_CLIENT_SECRET=...
+   JWT_SECRET=...
+   MODEL_RESIDENCY=swap
+   ```
+8. **First migration and smoke test:**
+   ```
+   alembic upgrade head
+   uvicorn autonomous_media.api.main:app --reload
+   curl http://localhost:8000/api/v1/system/health
+   ```
+   A 200 response here means the database, the API, and your environment variables all agree with each other. If anything above is misconfigured, this is where it surfaces — cheaply, before you've written any pipeline code.
 
-| Exception | When to raise |
-|---|---|
-| `StageUnrecoverableError` | Permanent failure — job goes straight to `dead_letter` (no retry) |
-| `ModelTimeoutError` | Inference took longer than `StageModelManager.timeout_for(model)` |
-| `MalformedOutputError` | LLM returned unparseable JSON |
-| `QuotaExceededError` | YouTube quota exhausted — job should be deferred, not dead-lettered |
-| `RightsBlockedError` | Clip fails rights gate — dead-letter immediately, no retry |
+---
 
-### Structured Logging
+## 2. Project & Module Structure
 
-Every log call must include `extra={"trace_id": job.trace_id}`. This is how the full lifecycle of one clip is reconstructable from logs alone.
+The package layout mirrors the spec's component names directly — if you're looking for the code behind "the Editing Engine," it's in `workers/editing.py`, not buried inside a generically-named `services/` folder.
 
-```python
-from autonomous_media.logging import get_logger
-logger = get_logger("workers.acquisition")
-logger.info("Video downloaded", extra={"trace_id": job.trace_id, "storage_key": key})
+```
+autonomous-media/
+  autonomous_media/
+    api/                       # FastAPI routers — one module per resource, spec §9.2
+      auth.py
+      channels.py
+      sources.py
+      jobs.py
+      clips.py
+      inventory.py
+      analytics.py
+      rights.py
+      system.py
+      main.py                  # app assembly, mounts every router above
+    db/
+      models.py                # SQLAlchemy models mirroring spec §8.3's core tables
+      session.py
+      migrations/               # Alembic environment + versions/
+    scheduler/
+      scheduler.py              # spec §12.1
+      queue.py                  # Redis Streams wrapper, spec §7.3
+    workers/
+      base.py                   # Worker base class, Chapter 4
+      acquisition.py             # spec §12.2
+      transcription.py           # spec §12.3
+      intelligence.py            # spec §12.4 / §11.1
+      vision.py                  # spec §12.5
+      editing.py                 # spec §12.6
+      rendering.py                # spec §12.7
+      quality_gate.py              # spec §12.8
+      publishing.py                # spec §12.11
+      analytics.py                  # spec §12.12
+      learning.py                    # spec §11.6 / §12.9 (residual, not the model runtime)
+    sources/
+      base.py                    # ContentSource protocol, spec §11.3
+      youtube_clip.py             # the only implementation shipped in V1
+      ai_story.py                  # stub, V2
+    runtime/
+      base.py                    # ModelRuntime protocol, spec §12.9
+      vulkan_llm.py                # Qwen 3 8B via the Vulkan runtime
+      whisper_asr.py
+      vision_vlm.py                 # Qwen2.5-VL
+      registry.py                    # StageModelManager, spec §12.9
+    rights/
+      gate.py                    # spec §11.4
+    prompts/                     # versioned prompt files, spec §25.8
+      scoring_v3.txt
+      title_v1.txt
+      description_v1.txt
+      grounding_v1.txt
+    config.py                    # the Pydantic schema from spec §25.6 lives here
+    events.py                    # event type constants, spec §7.3
+    exceptions.py                 # ModelTimeoutError, MalformedOutputError, StageUnrecoverableError — Chapter 7
+  eval/
+    benchmark_v1.jsonl            # spec §25.9 — checked in, versioned, never edited in place
+    run_eval.py                    # computes spec §18.1's metrics against the benchmark set
+  dashboard/                      # React + Tailwind, spec §12.14
+  docker/
+    docker-compose.yml
+  tests/
+    unit/
+    integration/
+    e2e/
+  docs/
+    technical-specification.md      # the v1.1 spec itself, checked in for reference
+    developer-guide.md               # this document
+  alembic.ini
+  requirements.txt
+  .env.example
 ```
 
-### Event Bus
+One rule worth stating explicitly: **a new capability gets a new file in the relevant package, not a new top-level folder.** If you're about to create a folder that isn't in the tree above, that's a signal to re-read spec §7.1's modular-monolith reasoning before doing it — the whole point of that decision was avoiding sprawl.
 
-Emit a `SystemEvent` row via `emit_event()` at every major pipeline transition. Use the constants in `events.py`, never bare strings.
+---
+
+## 3. Database Setup & Migrations
+
+### 3.1 Translating the spec's tables into SQLAlchemy
+
+`db/models.py` mirrors spec §8.3 directly. You don't need to translate all twelve tables before writing any code — translate the ones the vertical slice in Chapter 5 actually touches first (`channels`, `content_sources`, `source_videos`, `jobs`), and add the rest as you reach them. Two examples to establish the pattern:
 
 ```python
-from autonomous_media.events import VIDEO_DOWNLOADED
-emit_event(VIDEO_DOWNLOADED, job.trace_id, {"source_video_id": str(video_id)})
+# db/models.py
+import uuid
+from sqlalchemy import String, Text, Enum, ForeignKey, DateTime, Integer, JSON
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
+from .base import Base
+
+class Channel(Base):
+    __tablename__ = "channels"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    slug: Mapped[str] = mapped_column(String, unique=True)
+    niche: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="active")
+    language: Mapped[str] = mapped_column(String, default="en")
+    project_id: Mapped[str] = mapped_column(String)  # spec §5.1, §8.3 — which Google Cloud project's quota pool this channel uploads through
+    target_duration_min_s: Mapped[int] = mapped_column(Integer)
+    target_duration_max_s: Mapped[int] = mapped_column(Integer)
+    caption_style: Mapped[str] = mapped_column(String)
+    music_profile: Mapped[str] = mapped_column(String)
+    branding: Mapped[dict] = mapped_column(JSON, default=dict)
+    upload_cadence: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    content_sources: Mapped[list["ContentSourceRow"]] = relationship(back_populates="channel")
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum("queued", "running", "succeeded", "failed", "retrying", "dead_letter", "cancelled",
+             name="job_status"),
+        default="queued",
+    )
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    priority: Mapped[int] = mapped_column(Integer, default=5)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    channel_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("channels.id"), nullable=True)
+    trace_id: Mapped[str] = mapped_column(String, index=True)
+    last_heartbeat_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)  # spec §12.1 — the worker touches this every 15-30s while `running`
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+    started_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped["DateTime | None"] = mapped_column(DateTime, nullable=True)
 ```
 
-### Worker Pattern
+The `jobs.status` enum matches the state machine in spec §7.4 exactly — that diagram is the source of truth for which values are valid, not this file.
 
-Every worker inherits `Worker` from `workers/base.py`, declares a `job_type` class attribute matching what the Scheduler enqueues, and implements `process(session, job) -> JobResult`. The base class owns: heartbeat thread, status transitions, retry/dead-letter routing on exception.
+### 3.2 The `topics.embedding` column
+
+Needs the `pgvector` SQLAlchemy integration (`sqlalchemy-pgvector` or equivalent):
 
 ```python
+from pgvector.sqlalchemy import Vector
+
+class Topic(Base):
+    __tablename__ = "topics"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    label: Mapped[str] = mapped_column(String)
+    embedding: Mapped[list[float]] = mapped_column(Vector(768))  # dimension must match your embedding model's output
+    created_at: Mapped["DateTime"] = mapped_column(DateTime, server_default=func.now())
+```
+
+Add the `ivfflat`/`hnsw` index from spec §8.4 in the Alembic migration, not as a model default — index tuning parameters belong in migrations, where they're versioned and reviewable, not hidden in ORM metadata.
+
+### 3.3 Migration workflow
+
+```
+alembic init db/migrations          # once, at project start
+alembic revision --autogenerate -m "initial schema"
+alembic upgrade head
+```
+
+Every schema change from here forward is a new `alembic revision --autogenerate`, reviewed by hand before `upgrade head` — autogenerate is a first draft, not a guarantee, especially for the `pgvector` index and any check constraints on enum-like string columns. Spec §15.3's rule applies from the very first migration, not just once the system is "in production": back up the database before running `upgrade head` against anything that isn't a throwaway dev instance.
+
+---
+
+## 4. The Worker Framework
+
+### 4.1 The `Worker` base class
+
+The spec defines *what* each engine does (§12.1–§12.13) but doesn't hand you an actual base class — here it is. Every job-type worker inherits from this; the retry/error-handling logic lives here once, not copy-pasted into every worker:
+
+```python
+# workers/base.py
+import threading
+from abc import ABC, abstractmethod
+from autonomous_media.db.models import Job
+from autonomous_media.exceptions import StageUnrecoverableError
+
+HEARTBEAT_INTERVAL_S = 20   # spec §12.1's "every 15-30 seconds" — tune once NFR-3's benchmark exists
+
+class Worker(ABC):
+    job_type: str          # e.g. "download", "transcribe", "score_clips" — matches jobs.type
+
+    @abstractmethod
+    def process(self, job: Job) -> "JobResult":
+        """Do the actual work. Raise a specific exception (Chapter 7) on
+        failure — never return a success result for a job that didn't
+        actually succeed, and never swallow an exception to avoid a
+        retry. The Scheduler, not the worker, decides what retrying
+        means (spec §7.4)."""
+        ...
+
+    def run(self, job: Job) -> "JobResult":
+        """Called by the Scheduler. Handles the parts every worker
+        needs identically — including the heartbeat (spec §12.1) — so
+        individual workers only implement `process` and never have to
+        remember to touch last_heartbeat_at themselves."""
+        job.status = "running"
+        job.started_at = now()
+        stop_heartbeat = threading.Event()
+        heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop, args=(job, stop_heartbeat), daemon=True
+        )
+        heartbeat_thread.start()
+        try:
+            result = self.process(job)
+            job.status = "succeeded"
+            emit_event(f"{self.job_type}.completed", job.trace_id, result.summary())
+            return result
+        except StageUnrecoverableError as e:
+            job.status = "dead_letter"
+            job.error = str(e)
+            raise
+        except Exception as e:
+            job.attempts += 1
+            job.status = "retrying" if job.attempts < job.max_attempts else "dead_letter"
+            job.error = str(e)
+            raise
+        finally:
+            stop_heartbeat.set()
+            heartbeat_thread.join(timeout=2)
+            job.finished_at = now()
+
+    def _heartbeat_loop(self, job: Job, stop: threading.Event):
+        """Runs in the background for the lifetime of `process()`. The
+        Scheduler's own poll loop (spec §12.1) is what actually acts on
+        a stale last_heartbeat_at — this thread only keeps it fresh."""
+        while not stop.wait(HEARTBEAT_INTERVAL_S):
+            touch_heartbeat(job.id)   # a small, separate DB write — not the same session as the main job update
+```
+
+A new worker never needs to think about any of this — `_heartbeat_loop` lives once in the base class, and the Scheduler process that later notices a stale `last_heartbeat_at` (spec §12.1) doesn't care which worker subclass produced it.
+
+### 4.2 Registering a worker against a job type
+
+A simple registry, not a dependency-injection framework — this system doesn't need one at this scale:
+
+```python
+# workers/__init__.py
+WORKER_REGISTRY: dict[str, Worker] = {}
+
+def register(job_type: str):
+    def decorator(cls):
+        WORKER_REGISTRY[job_type] = cls()
+        return cls
+    return decorator
+
+# workers/acquisition.py
+@register("download")
 class AcquisitionWorker(Worker):
-    job_type = "acquisition"
-
-    def process(self, session: Session, job: Job) -> JobResult:
-        source_video_id = job.payload["source_video_id"]
-        # ... real implementation ...
-        return JobResult()
+    job_type = "download"
+    def process(self, job: Job) -> JobResult:
+        ...
 ```
 
-### Model Inference
+The Scheduler's dispatch is then `WORKER_REGISTRY[job.type].run(job)` — adding a worker never touches the Scheduler's code, only adds an entry to this dict (see Chapter 9's recipe for the full add-a-worker checklist).
 
-Never call `llama-server` directly from a worker. Always go through `StageModelManager`:
+### 4.3 `ContentSource` and `ModelRuntime`, as actual interfaces
 
-```python
-from autonomous_media.runtime.manager import stage_manager, InferenceRequest
-result = stage_manager.run_stage("scoring", InferenceRequest(prompt=rendered_prompt))
-scores = json.loads(result.text)
-```
-
-### Timestamps
-
-All `clip_candidates.start_ms` / `end_ms` values are **milliseconds**. Whisper word-level segment timestamps are also milliseconds in `faster-whisper`. Do not use seconds anywhere in the clip boundary logic.
-
-### Rights Gate
-
-Always check rights clearance before enqueuing a publish job:
-
-```python
-from autonomous_media.rights.gate import RightsGate
-gate = RightsGate(session_maker)
-if not gate.is_cleared(source.id):
-    raise RightsBlockedError(f"Source {source.id} has status={gate.get_status(source.id)}")
-```
+These are defined conceptually in spec §11.3 and §12.9; `sources/base.py` and `runtime/base.py` are where they become real, importable `Protocol` classes that `youtube_clip.py`, `vulkan_llm.py`, etc. implement against. Copy the signatures directly from those spec sections — this guide doesn't repeat them here to avoid the two copies drifting apart; if you change one, change the spec, not just the code.
 
 ---
 
-## 4. Adding a New Worker
+## 5. Building Your First Vertical Slice
 
-1. Create `autonomous_media/workers/<name>.py` implementing `Worker`.
-2. Register it in `autonomous_media/main.py` (or wherever `Scheduler` is initialised) in the `worker_registry` dict.
-3. Add the job type string to `events.py` as a constant.
-4. Write unit tests in `tests/unit/test_<name>_worker.py`.
-5. If the worker calls a model, register a `StubModelRuntime` for its stage in `tests/conftest.py`.
+This is the answer to "which module do I implement first?" The temptation with a system this thoroughly specified is to start building the Intelligence Engine, or the Model Runtime Manager, because that's where the interesting engineering is. Resist it. Build a **walking skeleton** first: the thinnest possible path from "one video URL" to "a row in `clip_candidates`," with every stage as dumb as possible, so you prove the *shape* of the system — job orchestration, state persistence, storage, event flow — before you invest in making any one stage smart.
 
----
+Concretely, in this order:
 
-## 5. Phase 1 Build Sequence (Walking Skeleton)
+**Step 1 — Infra up.** Chapters 1–3. You should be able to `curl` the health endpoint and see an empty `channels` table before writing a single worker.
 
-The correct order for implementing Phase 1 is:
+**Step 2 — A trivial job loop, before Redis Streams.** Literally a `while True: poll for queued jobs, dispatch, sleep(2)` loop against the `jobs` table directly. This is intentionally not the real Scheduler (spec §12.1) yet — you're proving worker dispatch and status transitions work before adding a message broker on top. Swap in Redis Streams once this works, not before.
 
-```
-Step 1: YouTubeClipSource.discover()
-  ├─ Real channels.list → playlistItems.list call (never search.list)
-  ├─ Persist SourceVideo rows
-  └─ Update ContentSource.last_polled_at
+**Step 3 — One hardcoded content source.** Implement `YouTubeClipSource.discover()` against a single test channel ID you've hardcoded, not a real `content_sources` config row yet. **Use `playlistItems.list` on the channel's uploads playlist, not `search.list`** (spec §5.1) — this is the single easiest mistake to make on a first pass, because `search` is the more obvious-looking endpoint, and it will burn your entire day's quota in a handful of calls if you reach for it here.
 
-Step 2: AcquisitionWorker.process()
-  ├─ Call source.fetch(item) → yt-dlp download
-  ├─ Verify checksum (SHA-256)
-  ├─ Upload to MinIO raw/{source_video_id}/original.mp4
-  └─ Emit VIDEO_DOWNLOADED event
+**Step 4 — Acquisition worker, for real.** Download the video, extract audio, write both to MinIO, write the `source_videos` row. No error handling beyond "don't crash the loop" yet.
 
-Step 3: TranscriptionWorker.process()
-  ├─ Pull raw audio from MinIO
-  ├─ Run faster-whisper (large-v3-turbo) with word-level timestamps
-  ├─ Write {word, start_ms, end_ms}[] JSON to MinIO transcripts/{id}.json
-  ├─ Create Transcript row (engine, language, word_count, storage_key)
-  └─ Emit TRANSCRIPT_READY event
+**Step 5 — Transcription worker, CPU is fine.** Wire up Whisper. Don't block this step on getting the Vulkan GPU path working (step 6's model runtime will need it; this step doesn't) — a CPU transcription that takes five minutes instead of thirty seconds still proves the pipeline shape.
 
-Step 4: Walking skeleton verified
-  └─ Confirm one InventoryItem row exists with status='ready'
-     (Intelligence/Vision/Editing can remain stubs here —
-     just validate the data contracts are correct end-to-end)
+**Step 6 — A stub scorer, not the real Intelligence Engine.** Pick the middle 45 seconds of the transcript. Write it to `clip_candidates` as if it were the output of real scoring. This is deliberately fake — the goal of this step is confirming a job can flow all the way from "download requested" to "candidate selected" and land in `succeeded` status with the right rows in the right tables. You are not trying to prove the AI is good yet.
 
-Step 5: IntelligenceWorker.process() — full implementation
-  ├─ Load transcript from MinIO
-  ├─ Sliding-window candidate generation (§11.1 parameters)
-  ├─ Heuristic first-pass filter (§20.3 cascade)
-  ├─ Batched LLM scoring via StageModelManager (scoring_v3.txt prompt)
-  ├─ pgvector novelty check (§11.2)
-  ├─ Create ClipCandidate rows (start_ms, end_ms, scores, rank)
-  └─ Emit CLIP_CANDIDATES_SCORED event
+**Step 7 — Confirm the skeleton.** One full run, one hardcoded channel, one video, ends with: a `source_videos` row, a `transcripts` row (with the real transcript in MinIO), a `clip_candidates` row (with fake but plausible start/end times), and the job's row showing `status = succeeded`. If you can see all four of those after running the loop once, the architecture works end to end. Everything from here is making each stage smarter, not proving the shape again.
 
-Step 6: EditingWorker + RenderingWorker (no AI, pure FFmpeg)
-  ├─ Crop/reframe speaker window
-  ├─ Burn captions (start_ms/end_ms → SRT)
-  ├─ Apply branding / music / silence-trim
-  ├─ Hardware encode (AMF/VCE via FFmpeg)
-  └─ Write Clip row + MinIO storage_key
+**Step 8 — Only now, wire in real intelligence.** Replace step 6's stub with the actual Model Runtime Manager (Chapter 4.3, spec §12.9) and the real scoring prompt (`prompts/scoring_v3.txt`, spec §25.8). This is also the point where it's worth setting up the Vulkan model runtime for real (step 5 didn't need it; this step does) and running your first pass against the benchmark set (spec §25.9) to get a baseline Precision@5 before you've tuned anything — you want that baseline number to exist before you start iterating, not after.
 
-Step 7: QualityGateWorker
-  └─ Spec §12.8 checks (duration, black frames, silence, aspect ratio)
-
-Step 8: RightsGate wired into publish path (BEFORE first real upload)
-
-Step 9: PublishingWorker
-  ├─ OAuth credential retrieval
-  ├─ Resumable upload via YouTube videos.insert
-  ├─ Quota tracking — backoff on 429/403
-  └─ Emit PUBLISH_COMPLETED event
-```
+Everything past this point — Vision, Editing, Rendering, the Quality Gate, the Rights Gate, Publishing — follows the same discipline: get a dumb version flowing through the pipeline before making it good. The spec's Phase 1 checklist (§27) tells you *what* needs to exist by the end of the phase; this chapter's sequencing tells you the *order* that gets you there without spending three weeks debugging job orchestration and clip scoring at the same time.
 
 ---
 
-## 6. Testing Strategy
+## 6. Testing Conventions
 
-### Test Levels
+Matches the pyramid in spec §18; this is the concrete "how," not a restatement of "why."
 
-| Level | Location | Rule |
+- **`tests/unit/`** — pure functions: scoring math, config validation, state-machine transition rules. No database, no Docker services running.
+- **`tests/integration/`** — pipeline stage-to-stage, with `ContentSource` and `ModelRuntime` mocked (spec §18's table explains why those two interfaces exist partly *for* this). Example:
+  ```python
+  class FakeModelRuntime(ModelRuntime):
+      def infer(self, request, timeout_s):
+          return InferenceResult(scores={"hook_strength": 80, ...})  # deterministic, no real inference
+
+  def test_intelligence_worker_selects_top_candidate(fake_transcript):
+      worker = IntelligenceWorker(runtime=FakeModelRuntime())
+      result = worker.process(job_for(fake_transcript))
+      assert result.selected_clips[0].scores.overall > result.selected_clips[1].scores.overall
+  ```
+- **`tests/e2e/`** — one fixture podcast video through the real pipeline in a test environment (real Docker services, real FFmpeg, still-mocked YouTube API), asserting on output duration, aspect ratio, caption presence, loudness target (spec §18's table).
+- **`eval/run_eval.py`** — not a pytest suite; a separate harness that runs the current scoring prompt/model against `benchmark_v1.jsonl` (spec §25.9) and writes an `eval_runs` row (spec §8.3) with the metrics from spec §18.1. Wired into CI as a required check before merging any change that touches a prompt, a scoring weight, or a model version — this is the promotion gate from §18.1, operationalized.
+
+---
+
+## 7. Coding Standards
+
+- **Type hints everywhere.** The architecture leans on `Protocol` and Pydantic throughout (spec §12.9, §25.6) — untyped code fights the design rather than fitting it.
+- **A real exception hierarchy**, since the spec's pseudocode already names specific exception types without defining them — define them once, here:
+  ```python
+  # exceptions.py
+  class AutonomousMediaError(Exception): ...
+  class ModelTimeoutError(AutonomousMediaError): ...
+  class MalformedOutputError(AutonomousMediaError): ...
+  class StageUnrecoverableError(AutonomousMediaError): ...
+  class QuotaExceededError(AutonomousMediaError): ...
+  class RightsBlockedError(AutonomousMediaError): ...
+  ```
+  Workers raise these specifically, not a bare `Exception` — `Worker.run()` (Chapter 4.1) and the Model Runtime Manager (spec §12.9) both branch on exception type to decide retry vs. fallback vs. dead-letter, so a bare `except Exception: raise RuntimeError(...)` anywhere in a worker silently breaks that logic.
+- **Structured logging, every call site.** `trace_id` is not optional (spec §17.1) — a logging wrapper that requires it as a positional argument, rather than a convention you have to remember, catches the omission at write-time instead of at 2am during an incident:
+  ```python
+  logger.info("clip.scored", trace_id=job.trace_id, clip_id=clip.id, overall_score=score.overall)
+  ```
+- **Docstrings on anything public**: one-line summary, then `Args`/`Returns` if the signature isn't self-explanatory from type hints alone. Don't document what the type hints already say.
+
+---
+
+## 8. Release Process
+
+1. Version bump (`pyproject.toml` or equivalent) and a changelog entry — this document and the spec both use semantic versioning (spec §15.3); the codebase should too.
+2. Run the eval harness (Chapter 6) — no merge to `main` on a scoring/prompt/model change without a passing promotion-gate result (spec §18.1).
+3. `alembic upgrade head --sql` (dry-run, prints the SQL without executing) against a copy of the real database before running it for real — catch a destructive migration before it's irreversible, not after.
+4. **Back up the database** (spec §21.1) immediately before any real migration runs against the actual operating instance — not "we'll back up regularly," but specifically gated on "right before this migration."
+5. Tag the release, deploy (in V1, "deploy" means pulling new images and restarting the local Docker Compose stack — spec §15.1 is explicit that this doesn't need to be more elaborate than that yet).
+6. Watch the dashboard's job/error rate for the first few pipeline runs after a release before considering it good — the chaos-testing scenarios in spec §18 describe what to do if something's wrong, but the fastest fix is catching it in the first ten minutes, not the first ten hours.
+
+---
+
+## 9. How-To Recipes
+
+Short, concrete answers to the questions that come up constantly once the system exists and is being extended.
+
+### Add a new worker
+1. Pick a `job_type` string (e.g. `"generate_thumbnail"`).
+2. Subclass `Worker` (Chapter 4.1) in `workers/<name>.py`, implement `process()`.
+3. Decorate it `@register("generate_thumbnail")`.
+4. Add `"generate_thumbnail"` to the `jobs.type` check constraint (a small Alembic migration).
+5. Have whichever upstream stage should trigger it create a `Job` row with that type and the right `payload`.
+6. Add an integration test with a mocked dependency, per Chapter 6.
+
+### Register a new model (e.g., swapping in a newer reasoning model)
+1. Add a row to the `models` table (spec §8.3) with its `resource_profile` (RAM/VRAM/quantization).
+2. Implement `ModelRuntime` for it in `runtime/<name>.py`.
+3. Register it in `runtime/registry.py` against the relevant pipeline `stage`.
+4. **Before promoting it over the current model**, run it through `eval/run_eval.py` (Chapter 6, spec §18.1) against the benchmark set — the comparative table in spec §25.7 is your starting hypothesis about whether it's worth trying, not a substitute for actually measuring it on this system's own data.
+5. Only flip `StageModelManager`'s registry entry once the eval run shows no regression.
+
+### Add a new job type (distinct from adding a worker — sometimes you need a new job type that an *existing* worker's logic branches on, not a new worker)
+1. Define the payload shape (a Pydantic model, alongside the config schema in `config.py`).
+2. Decide which existing or new worker handles it, and add the dispatch/branch logic.
+3. Add the type string to the `jobs.type` constraint.
+4. Add a state-machine test (Chapter 6) confirming it transitions through `queued → running → succeeded/failed` correctly — the state machine in spec §7.4 is generic across job types, but it's worth confirming a genuinely new type doesn't have a stage-specific edge case (e.g., a job type that has no meaningful "retry," only "skip").
+
+### Add a new content source (e.g., an RSS feed, ahead of schedule)
+1. Implement `ContentSource` (Chapter 4.3, spec §11.3) in `sources/<name>.py` — `discover()` and `fetch()`.
+2. Add the new value to the `SourceType` enum in `config.py` (spec §25.6).
+3. A channel adopts it by adding a `content_sources` row with that `type` — no changes anywhere else in the pipeline, which is the entire point of the abstraction (spec §11.3). If you find yourself needing to touch the Scheduler, the Editing Engine, or anything downstream of "raw media in hand" to add a source, something has leaked outside the interface and is worth stopping to fix before continuing.
+
+---
+
+## 10. Development Milestones
+
+More granular than spec §27's checklist, and sequenced — this is the order, not just the list, matching Chapter 5's walking-skeleton philosophy. Rough scope, not committed dates:
+
+| Milestone | Scope | Roughly corresponds to |
 |---|---|---|
-| Unit | `tests/unit/` | Pure functions only. No DB, no network, no filesystem. Mock everything. |
-| Integration | `tests/integration/` | Real DB (test Postgres), real MinIO. Mock `ContentSource` and `ModelRuntime`. |
-| E2E | `tests/e2e/` | Full pipeline from a fixture `.mp4` through to an `InventoryItem` row. Run manually before releases. |
+| M1 | Infra up: Postgres/Redis/MinIO/Alembic/FastAPI health check (Chapters 1–3) | Spec §27 Phase 0 |
+| M2 | Walking skeleton: one hardcoded channel, stub scorer, a job reaches `succeeded` end to end (Chapter 5, steps 1–7) | Spec §27 Phase 0 → 1 boundary |
+| M3 | Real transcription + real scoring: Model Runtime Manager wired in, batched scoring prompt live (spec §11.1), novelty/dedup working. Label the 50-episode benchmark set (40 dev / 10 hold-out, spec §25.9) and run the ~2-hour-episode benchmark (NFR-3) to get real per-stage timings and a real Precision@5 baseline — both before tuning starts, not after | Spec §27 Phase 1 |
+| M4 | Vision (only the selected clip windows, spec §7.5/§12.5) + Editing + Rendering: crop, captions, silence trim, music, branding, automated QC gate | Spec §27 Phase 1 |
+| M5 | Rights Gate + Publishing: the quota-aware, rights-gated real YouTube upload — **build the Rights Gate before this milestone's first real upload, not after** (spec §11.4, §27 explicitly calls this out) | Spec §27 Phase 1 completion |
+| M6 | Analytics polling + Learning Engine's weighted-average allocation + dashboard clip-review UI (the manual safety net, spec §10.1) | Spec §27 Phase 2 start |
+| M7 | Second and third channel configured via data alone, no code changes — this is the milestone that actually proves the "channels submit jobs, they don't own pipelines" claim (spec §7.1), rather than just asserting it | Spec §27 Phase 2 |
 
-### Running Tests
-
-```powershell
-# Unit tests — fast, no services required
-pytest tests/unit/ -v
-
-# Integration tests — requires docker compose up -d
-pytest tests/integration/ -v
-
-# All tests
-pytest tests/ -v
-```
-
-### Mocking Models
-
-Use `StubModelRuntime` (already registered as default in `runtime/manager.py`) in all tests. It returns deterministic JSON so tests don't depend on a live `llama-server`. When writing a new integration test:
-
-```python
-# conftest.py
-from autonomous_media.runtime.manager import stage_manager, StubModelRuntime
-stage_manager.register("scoring", StubModelRuntime())
-```
+Each milestone should end with something *observable* — a real clip in a real channel's inventory, a real dashboard screen, a real eval score — not just "the code for X exists." If a milestone is taking meaningfully longer than the phase estimates in spec §28 suggest, that's useful signal about where this specific project's actual complexity lives, worth feeding back into the spec rather than pushing through silently.
 
 ---
 
-## 7. Evaluation & Promotion Gate (spec §18.1)
-
-Before promoting any change to the scoring prompt, scoring weights, or inference model to production:
-
-1. Run `eval/run_eval.py dev` against the development benchmark slice.
-2. Tune until `precision_at_5` is stable.
-3. Run `eval/run_eval.py holdout` **once** (this is the only time the hold-out slice is touched).
-4. Write the resulting `metrics` dict to an `eval_runs` row.
-5. Promotion is allowed only if hold-out metrics do not regress vs. the previous production version.
-
-The 40-episode dev slice (`eval/benchmark_dev_v1.jsonl`) needs to be labeled before Phase 2 begins. Labeling protocol: for each episode in the dev set, a human identifies the top-5 clips they would have published. Those clip IDs go in the `labeled_good_clip_ids` field.
-
----
-
-## 8. Quota Management (spec §5.1)
-
-YouTube Data API v3 has a hard 10,000-unit daily quota (shared per Google Cloud project).
-
-| Operation | Cost |
-|---|---|
-| `videos.insert` (upload) | 1,600 units |
-| `playlistItems.list` (poll) | 1 unit/page |
-| `channels.list` | 1 unit |
-| `search.list` | **100 units** ← **NEVER USE THIS** |
-
-**Rule:** All source polling uses `playlistItems.list`. The uploads playlist ID is resolved **once** via `channels.list` and cached in `ContentSource.config`. Never call `search.list` anywhere.
-
-At 1,600 units per upload and 10,000 units/day, that is ~6 uploads/day across all channels. The `PublishingWorker` must check quota before calling `videos.insert`. On quota exhaustion, raise `QuotaExceededError` — the Scheduler defers the job rather than dead-lettering it.
-
----
-
-## 9. Troubleshooting Known Constraints
-
-### Vulkan / GPU Not Engaged
-
-**Symptom:** GPU usage stays at 0% in Task Manager during inference; wall-clock time is 10–50× slower.
-
-**Steps:**
-1. Confirm `llama-server.exe` was compiled with Vulkan support: `llama-server.exe --version` should include `vulkan`.
-2. Check AMD driver version. Required: Adrenalin 24.x or later (Polaris/GCN4 support was retained in the Adrenalin driver path even as ROCm dropped it).
-3. Verify the `--gpu-layers` argument is set to `99` (or any value ≥ the number of model layers).
-4. Check logs for `Vulkan device not found` — if seen, the Vulkan runtime is not installed: `winget install KhronosGroup.VulkanRT`.
-
-### Heartbeat-Stuck Jobs
-
-**Symptom:** Job sits in `running` status indefinitely after the process was killed.
-
-**Fix:** The Scheduler's `_recover_stuck_jobs()` loop will requeue it within `HEARTBEAT_TIMEOUT_S = 120` seconds automatically. If this does not happen, check that the Scheduler process itself is running.
-
-Manually reset if urgent:
-```sql
-UPDATE jobs SET status = 'queued', attempts = attempts + 1 WHERE id = '<job_id>';
-```
-
-### Transcript JSON Truncated
-
-**Symptom:** `faster-whisper` produces a valid transcript but the MinIO write silently truncates it.
-
-**Root cause:** Most likely a `word_timestamps=True` output that was serialised to `str()` rather than `json.dumps()`. Always serialise with `json.dumps(segments, ensure_ascii=False)`.
-
-### PostgreSQL pgvector Extension Missing
-
-**Symptom:** `alembic upgrade head` fails with `type "vector" does not exist`.
-
-**Fix:** The `docker-compose.yml` uses `ankane/pgvector:latest` which ships with the extension. If using an external Postgres:
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-### MinIO Bucket Not Found
-
-**Symptom:** `minio.error.S3Error: NoSuchBucket` on first acquisition worker run.
-
-**Fix:** Create the buckets on first start (this will be automated in a startup script):
-```powershell
-# Using the MinIO Client (mc)
-mc alias set local http://localhost:9000 minioadmin minioadmin
-mc mb local/autonomous-media-raw
-mc mb local/autonomous-media-transcripts
-mc mb local/autonomous-media-renders
-mc mb local/autonomous-media-branding
-```
-
----
-
-## 10. Phase 2 & Beyond — Open Questions
-
-The following design questions should be resolved **by reference to the Technical Specification v1.2** before implementation of Phase 2 begins. They are recorded here to flag the decision points, not to pre-answer them.
-
-1. **Vision Stage Trigger (spec §7.5):** The spec states Vision runs on selected clip windows, not on the entire source video. Confirm: does the `VisionWorker` receive a `clip_candidate_id` (with start/end timestamps) or a `source_video_id`? The current job payload schema in `workers/vision.py` uses `source_video_id` — this may need updating. Refer to spec §7.5 for the authoritative answer.
-
-2. **Scoring Cascade Thresholds (spec §20.3):** The heuristic first-pass thresholds in the `IntelligenceWorker` (e.g. minimum segment energy, minimum hook phrase density) are set to placeholder values. The NFR-3 benchmark run (timing 10 real episodes end-to-end) is what produces the data to tune these. Do **not** tune them from intuition — run the benchmark first.
-
-3. **Pgvector Index Type (spec §11.2):** The `topics.embedding` column uses `Vector(768)`. The migration does not yet create a vector index. Before the first production run at scale, decide between `ivfflat` (faster build, lower recall) and `hnsw` (better recall, slower build). Refer to spec §11.2 for the guidance on which to prefer. Create the index in a new migration **after** the first realistic data load.
-
-4. **Audio Format Contract (spec §12.3):** `faster-whisper` works best on 16kHz mono WAV. Confirm that the `AcquisitionWorker` writes `audio.wav` in this exact format (using `ffmpeg -ar 16000 -ac 1`) before the `TranscriptionWorker` reads it. Both workers need to agree on this contract.
-
-5. **Quota Deferral Duration (spec §5.1):** The spec requires deferred publish jobs to be retried "when quota resets." YouTube quota resets at midnight Pacific. The Scheduler's deferral logic needs a time-zone-aware next-reset calculation, not a naive `+ 24 hours`. Refer to spec §5.1 for the exact required behaviour.
-
-6. **Evaluation Benchmark Labeling (spec §25.9):** The `eval/benchmark_dev_v1.jsonl` and `benchmark_holdout_v1.jsonl` files are currently empty. The labeling protocol (40 dev episodes, 10 hold-out) must be completed before Phase 2's scoring improvements can be validated against the promotion gate. The protocol is specified in §25.9.
-
-7. **TikTok/Instagram Syndication (V2 — spec §26):** Multi-platform distribution is explicitly deferred to V2. Do not design any V1 code to accommodate it — that introduces premature abstraction. V1's `PublishingWorker` is explicitly YouTube-only. When V2 begins, the correct path is implementing a second concrete `PublisherProtocol` for TikTok/Instagram, not parameterising the existing one.
+*End of document. Companion to `autonomous-media-technical-specification.md` v1.1 — keep both in `docs/` and update this guide's cross-references if section numbers in the spec ever shift.*
