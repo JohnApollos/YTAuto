@@ -71,7 +71,10 @@ class Settings(BaseSettings):
     youtube_oauth_client_secret: Optional[str] = None
     jwt_secret: Optional[str] = None
     model_residency: str = "swap"
+    youtube_api_key: Optional[str] = None
+    youtube_api_env: str = "production"
+    model_env: str = "production"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()
