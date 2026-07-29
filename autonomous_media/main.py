@@ -41,16 +41,7 @@ def start_scheduler():
     """Start the background scheduler in a daemon thread."""
     import os
     import threading
-    from autonomous_media.runtime.manager import stage_manager, ResourceProfile
-    from autonomous_media.runtime.vulkan_llm_runtime import VulkanLLMRuntime
-    
-    if os.environ.get("MODEL_ENV", "production") != "test":
-        llm_profile = ResourceProfile(ram_mb=6000, vram_mb=6000, backend="vulkan", quantization="Q4_K_M")
-        llm_runtime = VulkanLLMRuntime(name="qwen3", resource_profile=llm_profile)
-        stage_manager.register("scoring", llm_runtime, fallback=llm_runtime)
-        stage_manager.register("title", llm_runtime)
-        stage_manager.register("description", llm_runtime)
-        stage_manager.register("grounding", llm_runtime)
+    from autonomous_media.runtime.manager import stage_manager
 
     from autonomous_media.workers.acquisition import AcquisitionWorker
     from autonomous_media.workers.transcription import TranscriptionWorker

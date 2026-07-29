@@ -226,3 +226,17 @@ stage_manager.register("description", _stub)
 stage_manager.register("grounding", _stub)
 stage_manager.register("transcription", _stub)
 stage_manager.register("vision", _stub)
+
+# In production mode, override LLM stages with real VulkanLLMRuntime
+import os
+if os.environ.get("MODEL_ENV", "production") != "test":
+    try:
+        from autonomous_media.runtime.vulkan_llm_runtime import VulkanLLMRuntime
+        llm_profile = ResourceProfile(ram_mb=6000, vram_mb=6000, backend="vulkan", quantization="Q4_K_M")
+        llm_runtime = VulkanLLMRuntime(name="qwen3", resource_profile=llm_profile)
+        stage_manager.register("scoring", llm_runtime, fallback=llm_runtime)
+        stage_manager.register("title", llm_runtime)
+        stage_manager.register("description", llm_runtime)
+        stage_manager.register("grounding", llm_runtime)
+    except Exception as e:
+        logger.warning(f"Failed to register Vulkan LLM runtimes: {e}")
