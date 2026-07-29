@@ -780,9 +780,9 @@ yt-dlp --dump-json "https://www.youtube.com/watch?v=dQw4w9WgXcQ" 2>&1 | `
 ### 16.10 Unit Test Suite
 
 ```powershell
-# All 17 unit tests must pass — any failure before you've changed anything means a broken installation
+# All 31 unit tests must pass — any failure before you've changed anything means a broken installation
 pytest tests/unit/ -v --tb=short
-# Expected: 17 passed, 0 failed, 0 errors
+# Expected: 31 passed, 0 failed, 0 errors
 ```
 
 **If fails:** check the error output for which module is failing to import. Usually indicates a missing dependency (`pip install -r requirements.txt`) or a wrong `DATABASE_URL` (unit tests should not need a live database — if they do, something is importing a DB-dependent module at test collection time).
@@ -823,7 +823,7 @@ Check "FFmpeg on PATH"            'ffmpeg -version'
 Check "faster-whisper import"     'python -c "from faster_whisper import WhisperModel; print(\"OK\")"'
 Check "llama-server health"       '(Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing).StatusCode -eq 200'
 Check "yt-dlp on PATH"            'yt-dlp --version'
-Check "Unit tests (17)"           'pytest tests/unit/ -q --tb=no 2>&1 | Select-String "passed"'
+Check "Unit tests (31)"           'pytest tests/unit/ -q --tb=no 2>&1 | Select-String "passed"'
 
 Write-Host "`nResult: $pass passed, $fail failed" -ForegroundColor $(if ($fail -eq 0) {"Green"} else {"Red"})
 if ($fail -eq 0) { Write-Host "System is ready." -ForegroundColor Green }
@@ -852,7 +852,7 @@ Autonomous Media - System Verification
   [PASS] faster-whisper import
   [PASS] llama-server health
   [PASS] yt-dlp on PATH
-  [PASS] Unit tests (17)
+  [PASS] Unit tests (31)
 
 Result: 13 passed, 0 failed
 System is ready.

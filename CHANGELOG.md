@@ -7,25 +7,37 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
-## [Unreleased] — Phase 1: Podcast Clipping MVP
+## [Unreleased]
 
-Next milestone. All workers have correct structural contracts and are wired into the Scheduler. Phase 1 replaces all `process()` method stubs with real implementations, end-to-end.
-
-### Planned
-- `YouTubeClipSource.discover()` — real `channels.list` → `playlistItems.list` chain (spec §5.1 quota guard)
-- `AcquisitionWorker.process()` — yt-dlp download, SHA-256 checksum, MinIO write
-- `TranscriptionWorker.process()` — faster-whisper Large-v3-Turbo with word-level timestamps; result JSON to MinIO
-- `IntelligenceWorker.process()` — sliding-window candidate generation, heuristic first-pass, batched LLM scoring (`scoring_v3.txt`), pgvector novelty/dedup
-- `VisionWorker.process()` — MediaPipe speaker tracking + Qwen2.5-VL OCR on selected clip windows
-- `EditingWorker.process()` + `RenderingWorker.process()` — FFmpeg AMF/VCE hardware encode, caption burn-in, branding, silence-trim
-- `QualityGateWorker.process()` — QC checks per spec §12.8
-- `RightsGate` wired into publish path before first real upload
-- `PublishingWorker.process()` — YouTube `videos.insert`, quota-aware with `QuotaExceededError` deferral
-- `AnalyticsWorker.process()` — YouTube Analytics API poll → `analytics_snapshots` rows
-- MinIO bucket auto-creation on startup
-- Eval benchmark labeling — 40-episode dev slice per §25.9 protocol
+Next milestone.
 
 ---
+
+## [0.8.0] — Phase 1 & 2 Implementation: Pipeline & AI Backend MVP — 2026-07-29
+
+This release completes Phase 1 and Phase 2, delivering a fully operational pipeline from YouTube channel polling to AI clipping, auto-editing, and publication.
+
+### Added — Quota Tracking & Deferral
+- Implemented daily Pacific timezone-based `QuotaTracker` supporting Redis storage with a thread-safe in-memory fallback.
+- Added pre-upload quota capacity checking and consumption hook inside `PublishingWorker` to prevent exceeding the YouTube daily upload limit (1600 units/upload).
+- Added automatic job deferral to Pacific midnight when quota is exhausted, rescheduling publishing jobs into the queue.
+
+### Added — Evaluation & Benchmarking
+- Populated `eval/benchmark_dev_v1.jsonl` with 10 labeled episodes containing candidate segments and target clip IDs.
+- Completed evaluation harness in `eval/run_eval.py` using the stage manager's real scoring flow.
+- Added and verified NFR-3 wall-clock latency benchmark script (`eval/nfr3_benchmark.py`).
+
+### Changed — Workers & Startup Gaps Fixed
+- Added UUID string-to-object parsing in `IntelligenceWorker`, `EditingWorker`, `QualityGateWorker`, and `PublishingWorker` to resolve SQLite data type compatibility.
+- Handled SQLite dialect compatibility inside `IntelligenceWorker` by dynamically skipping pgvector cosine distance queries.
+- Refactored `RightsGate` instantiation to use the worker's session maker factory instead of the active worker session, preventing premature session closure.
+- Implemented subtitle auto-generation and FFmpeg relative-path commands to resolve Windows absolute path drive letter limitations.
+
+### Added — Testing
+- Created `tests/integration/test_pipeline_e2e.py` verifying the full worker pipeline flow (`Intelligence` -> `Editing` -> `QualityGate`) sequentially.
+- Created `tests/unit/test_quota_tracker.py` covering fallback capacity logic and `PublishingWorker` quota enforcement.
+
+
 
 ## [0.7.0] — Spec v1.2 Compliance Audit — 2026-07-28
 

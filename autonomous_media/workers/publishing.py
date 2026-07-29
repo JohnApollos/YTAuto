@@ -22,6 +22,12 @@ class PublishingWorker(Worker):
         if not inventory_item_id:
             raise StageUnrecoverableError("Missing inventory_item_id in job payload")
 
+        if isinstance(inventory_item_id, str):
+            try:
+                inventory_item_id = uuid.UUID(inventory_item_id)
+            except ValueError:
+                raise StageUnrecoverableError(f"Invalid inventory_item_id format: {inventory_item_id}")
+
         inventory_item = session.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
         if not inventory_item:
             raise StageUnrecoverableError(f"InventoryItem {inventory_item_id} not found")
@@ -43,7 +49,7 @@ class PublishingWorker(Worker):
             raise StageUnrecoverableError(f"Channel {clip.channel_id} not found")
 
         # 1. Rights check via RightsGate (spec §11.4)
-        rights_gate = RightsGate(lambda: session)
+        rights_gate = RightsGate(self.session_maker)
         if not rights_gate.is_cleared(source_video.content_source_id):
             raise RightsBlockedError(
                 f"Publishing blocked: Content source {source_video.content_source_id} rights status is not cleared"
@@ -121,7 +127,15 @@ class PublishingWorker(Worker):
             if not os.path.exists(video_path):
                 raise StageUnrecoverableError(f"Rendered clip file not found at {video_path}")
 
-            # 5. Retrieve OAuth credentials from Channel branding or environment
+            # 5. Check remaining quota before upload (spec §5.1)
+            project_id = channel.project_id or "default_project"
+            from autonomous_media.quota import quota_tracker
+            if not quota_tracker.has_quota(project_id, 1600):
+                raise QuotaExceededError(
+                    f"Project {project_id} has insufficient quota remaining for upload (requires 1600)"
+                )
+
+            # 6. Retrieve OAuth credentials from Channel branding or environment
             oauth_data = channel.branding.get("oauth_credentials") or {}
             if not oauth_data and os.environ.get("YOUTUBE_OAUTH_TOKEN"):
                 oauth_data = {"token": os.environ.get("YOUTUBE_OAUTH_TOKEN")}
@@ -179,11 +193,16 @@ class PublishingWorker(Worker):
                 except Exception as e:
                     raise StageUnrecoverableError(f"Failed to execute YouTube upload: {e}")
 
-            # 6. Save publishing status to database
+            # Consume quota
+            quota_tracker.consume_quota(project_id, 1600)
+
+            # 7. Save publishing status to database
             inventory_item.status = "published"
             inventory_item.published_at = datetime.now(timezone.utc)
             inventory_item.external_video_id = youtube_video_id
             session.commit()
+            
+
 
             # 7. Emit PUBLISH_COMPLETED event
             emit_event(

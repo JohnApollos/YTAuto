@@ -5,6 +5,11 @@
 
 $pass = 0; $fail = 0
 
+# Detect virtual environment paths for robustness
+$pythonBin = if (Test-Path ".\.venv\Scripts\python.exe") { ".\.venv\Scripts\python.exe" } else { "python" }
+$pytestBin = if (Test-Path ".\.venv\Scripts\pytest.exe") { ".\.venv\Scripts\pytest.exe" } else { "pytest" }
+$ytdlpBin = if (Test-Path ".\.venv\Scripts\yt-dlp.exe") { ".\.venv\Scripts\yt-dlp.exe" } else { "yt-dlp" }
+
 function Check($label, $cmd) {
     try {
         $result = Invoke-Expression $cmd 2>&1
@@ -29,11 +34,11 @@ Write-Host ""
 
 # --- Python Environment ---
 Write-Host "Python Environment:" -ForegroundColor Yellow
-Check "Python 3.11+"          "python --version"
-Check "Package import"        'python -c "import autonomous_media; print(\"OK\")"'
-Check "faster-whisper import" 'python -c "from faster_whisper import WhisperModel; print(\"OK\")"'
-Check "minio import"          'python -c "from minio import Minio; print(\"OK\")"'
-Check "yt-dlp on PATH"        "yt-dlp --version"
+Check "Python 3.11+"          "$pythonBin --version"
+Check "Package import"        "$pythonBin -c `"import autonomous_media; print('OK')`""
+Check "faster-whisper import" "$pythonBin -c `"from faster_whisper import WhisperModel; print('OK')`""
+Check "minio import"          "$pythonBin -c `"from minio import Minio; print('OK')`""
+Check "yt-dlp on PATH"        "$ytdlpBin --version"
 Check "FFmpeg on PATH"        "ffmpeg -version"
 
 Write-Host ""
@@ -69,7 +74,7 @@ Write-Host ""
 
 # --- Tests ---
 Write-Host "Unit Tests:" -ForegroundColor Yellow
-Check "All 17 unit tests pass" 'pytest tests/unit/ -q --tb=no 2>&1 | Select-String "passed"'
+Check "All 31 unit tests pass" "$pytestBin tests/unit/ -q --tb=no 2>&1 | Select-String `"passed`""
 
 Write-Host ""
 
