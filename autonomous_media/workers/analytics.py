@@ -18,6 +18,12 @@ class AnalyticsWorker(Worker):
         if not inventory_item_id:
             raise StageUnrecoverableError("Missing inventory_item_id in job payload")
 
+        if isinstance(inventory_item_id, str):
+            try:
+                inventory_item_id = uuid.UUID(inventory_item_id)
+            except ValueError:
+                raise StageUnrecoverableError(f"Invalid inventory_item_id format: {inventory_item_id}")
+
         inventory_item = session.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
         if not inventory_item:
             raise StageUnrecoverableError(f"InventoryItem {inventory_item_id} not found")

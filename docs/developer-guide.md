@@ -467,6 +467,35 @@ More granular than spec §27's checklist, and sequenced — this is the order, n
 
 Each milestone should end with something *observable* — a real clip in a real channel's inventory, a real dashboard screen, a real eval score — not just "the code for X exists." If a milestone is taking meaningfully longer than the phase estimates in spec §28 suggest, that's useful signal about where this specific project's actual complexity lives, worth feeding back into the spec rather than pushing through silently.
 
+## §26 — Initial Setup After Deployment
+
+After running `alembic upgrade head` and starting both the API server and the scheduler, the database contains no channels or content sources. Complete these steps **once** in the dashboard (http://localhost:8000) before the pipeline will process anything.
+
+### Step 1 — Create a Channel
+1. Open the **Setup** tab.
+2. In the **Channels** section, fill in: Name (your YouTube channel name), Slug (URL-friendly ID), Niche (e.g. "tech podcasts"), Google Cloud Project ID (from your GCP console — this is the quota pool identifier), and YouTube Data API v3 Key.
+3. Click **Add Channel**. The channel appears in the list.
+
+### Step 2 — Add a Content Source
+1. In the **Content Sources** section, select your new channel.
+2. Enter the **YouTube Channel ID** of the source podcast to clip (e.g. `UCxxxxxxxxxxxxxxxxxxxxxx`). Find this on YouTube: go to the channel → About → Share → Copy channel ID.
+3. Set the **Poll Interval** (recommended: 60 minutes).
+4. Click **Add Source**.
+
+### Step 3 — Set Rights Status
+1. In the **Rights & OAuth** section, select your source from the dropdown.
+2. Set status to `owned` (you own the content) or `licensed` (you have a license). Without this, the publishing worker will block all uploads.
+3. Optionally fill in an Evidence URL (e.g. a link to your license agreement).
+4. Click **Save Rights**.
+
+### Step 4 — Configure YouTube OAuth Credentials
+1. In the same section, under **YouTube OAuth**, select your channel.
+2. Paste your Access Token, Refresh Token, Client ID, and Client Secret from the Google Cloud OAuth flow.
+   - To obtain these: In GCP Console → APIs & Services → Credentials → OAuth 2.0 Client IDs, download the JSON, then run the one-time OAuth consent flow using `google-auth-oauthlib`.
+3. Click **Save Credentials**.
+
+Once these 4 steps are complete, the scheduler will automatically enqueue the first acquisition job within one poll interval. You can monitor progress in the **Pipeline Overview** tab.
+
 ---
 
 *End of document. Companion to `autonomous-media-technical-specification.md` v1.1 — keep both in `docs/` and update this guide's cross-references if section numbers in the spec ever shift.*

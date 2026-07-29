@@ -12,8 +12,8 @@ An autonomous AI content production system. It continuously monitors source YouT
 |---|---|
 | Phase 0 — Foundation (infra, schema, API skeleton, dashboard) | ✅ Complete |
 | Spec v1.2 Compliance Audit (16 schema/code gaps closed) | ✅ Complete — commit `5d21b02` |
-| Phase 1 — Podcast Clipping MVP (real pipeline logic) | 🔜 Next |
-| Phase 2 — Quality & Intelligence | Planned |
+| Phase 1 — Podcast Clipping MVP (all 10 pipeline workers implemented) | ✅ Complete — commit `391bfe1` |
+| Phase 2 — AI Model Integration, Quota System, E2E Tests | ✅ Complete — commit `391bfe1` |
 | V2 — AI Story Generation | Deferred |
 
 ---
@@ -107,12 +107,13 @@ autonomous-media/
     prompts/          # Versioned prompt files (scoring_v3, title_v1, etc.)
     events.py         # Canonical event type constants (spec §7.3)
     config.py         # Pydantic ChannelConfig schema (spec §25.6)
+    quota.py          # Daily YouTube API quota tracker (Pacific timezone, Redis-backed)
     exceptions.py     # Typed exception hierarchy
     logging.py        # JSON structured logger with trace_id
   eval/
-    run_eval.py           # Precision@5 evaluation harness (spec §18.1)
-    benchmark_dev_v1.jsonl    # 40-episode dev slice (to be labeled)
-    benchmark_holdout_v1.jsonl  # 10-episode hold-out (never touched during tuning)
+  │  run_eval.py           # Precision@5 evaluation harness (spec §18.1)
+  │  benchmark_dev_v1.jsonl    # 10-episode dev slice (to be labeled)
+  │  benchmark_holdout_v1.jsonl  # 10-episode hold-out (never touched during tuning)
   dashboard/          # React + Tailwind operator console
   docker-compose.yml  # Postgres (pgvector), Redis, MinIO
   docs/               # Full documentation suite

@@ -43,6 +43,7 @@ class Scheduler:
         self.running = True
         while self.running:
             try:
+                self._seed_poll_jobs()
                 self._recover_stuck_jobs()
                 self._poll()
             except Exception as e:
@@ -52,6 +53,68 @@ class Scheduler:
     def stop(self):
         self.running = False
         logger.info("Scheduler stopped", extra={"trace_id": "scheduler"})
+
+    def _seed_poll_jobs(self):
+        """
+        Scan active ContentSource items and enqueue acquisition jobs when they are due.
+        """
+        from datetime import datetime, timezone, timedelta
+        from autonomous_media.db.models import ContentSource, Job
+        
+        now_utc = datetime.now(timezone.utc)
+        
+        with self.session_maker() as session:
+            active_sources = session.query(ContentSource).filter(ContentSource.active == True).all()
+            if not active_sources:
+                return
+            
+            # Query all pending/running acquisition jobs
+            pending_jobs = (
+                session.query(Job)
+                .filter(
+                    Job.type == "acquisition",
+                    Job.status.in_(["queued", "running", "retrying"])
+                )
+                .all()
+            )
+            # Find the set of content source IDs that already have pending acquisition jobs
+            pending_source_ids = set()
+            for job in pending_jobs:
+                src_id = job.payload.get("source_id")
+                if src_id:
+                    pending_source_ids.add(str(src_id))
+            
+            for source in active_sources:
+                source_id_str = str(source.id)
+                if source_id_str in pending_source_ids:
+                    continue
+                
+                poll_interval_minutes = source.config.get("poll_interval_minutes", 60)
+                last_polled = source.last_polled_at
+                
+                if last_polled is not None:
+                    if last_polled.tzinfo is None:
+                        last_polled = last_polled.replace(tzinfo=timezone.utc)
+                    if now_utc - last_polled < timedelta(minutes=poll_interval_minutes):
+                        continue
+                
+                # Polling is due, seed the acquisition job
+                logger.info(
+                    f"Seeding acquisition job for content source {source.id}",
+                    extra={"trace_id": f"poll-seed-{source.id}"}
+                )
+                new_job = Job(
+                    type="acquisition",
+                    payload={"source_id": source_id_str},
+                    channel_id=source.channel_id,
+                    priority=5,
+                    attempts=0,
+                    max_attempts=3,
+                    trace_id=f"poll-{source.id}"
+                )
+                session.add(new_job)
+            
+            session.commit()
 
     def _poll(self):
         """Dispatch queued jobs up to max_concurrent_jobs."""

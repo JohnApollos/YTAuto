@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy.orm import Session
 from autonomous_media.workers.base import Worker, JobResult
 from autonomous_media.db.models import Job, AnalyticsSnapshot, InventoryItem, Clip, ClipCandidate, Channel
@@ -22,6 +23,12 @@ class LearningWorker(Worker):
         snapshot_id = job.payload.get("analytics_snapshot_id")
         if not snapshot_id:
             raise StageUnrecoverableError("Missing analytics_snapshot_id in job payload")
+
+        if isinstance(snapshot_id, str):
+            try:
+                snapshot_id = uuid.UUID(snapshot_id)
+            except ValueError:
+                raise StageUnrecoverableError(f"Invalid analytics_snapshot_id format: {snapshot_id}")
 
         snapshot = session.query(AnalyticsSnapshot).filter(AnalyticsSnapshot.id == snapshot_id).first()
         if not snapshot:

@@ -67,9 +67,9 @@ class Settings(BaseSettings):
     minio_endpoint: str
     minio_access_key: str
     minio_secret_key: str
-    youtube_oauth_client_id: str
-    youtube_oauth_client_secret: str
-    jwt_secret: str
+    youtube_oauth_client_id: Optional[str] = None
+    youtube_oauth_client_secret: Optional[str] = None
+    jwt_secret: Optional[str] = None
     model_residency: str = "swap"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
