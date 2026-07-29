@@ -56,6 +56,14 @@ def test_pipeline_e2e_flow(
     os.environ["MODEL_ENV"] = "test"
     os.environ["YOUTUBE_API_ENV"] = "test"
 
+    # Register stub model runtimes dynamically to prevent tests hitting production Vulkan port
+    from autonomous_media.runtime.manager import stage_manager, StubModelRuntime
+    _stub = StubModelRuntime()
+    stage_manager.register("scoring", _stub, fallback=_stub)
+    stage_manager.register("title", _stub)
+    stage_manager.register("description", _stub)
+    stage_manager.register("grounding", _stub)
+
     # Setup mocked sentence transformer to avoid downloading models in tests
     mock_model = MagicMock()
     mock_model.encode.return_value = [0.1] * 768 # Match vector size 768

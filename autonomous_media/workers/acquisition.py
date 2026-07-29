@@ -14,6 +14,8 @@ from autonomous_media.logging import get_logger, emit_event
 from autonomous_media.events import VIDEO_DOWNLOADED
 from autonomous_media.exceptions import StageUnrecoverableError, QuotaExceededError
 
+from autonomous_media.config import settings
+
 logger = get_logger("workers.acquisition")
 
 class AcquisitionWorker(Worker):
@@ -35,7 +37,7 @@ class AcquisitionWorker(Worker):
         existing_ids = {v[0] for v in existing_videos}
 
         # Resolve api_key
-        api_key = content_source.config.get("api_key") or os.environ.get("YOUTUBE_API_KEY")
+        api_key = content_source.config.get("api_key") or settings.youtube_api_key
         if not api_key:
             raise StageUnrecoverableError("No API key found in ContentSource config or environment")
 
