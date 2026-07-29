@@ -311,8 +311,13 @@ docker exec -it autonomous_media_postgres psql -U autonomous autonomous_media -c
 ---
 
 ## Part 8 — Create MinIO Buckets
+ 
+The object storage buckets must exist before the first worker run. 
 
-The object storage buckets must exist before the first worker run. Create them once:
+> [!NOTE]
+> In Phase 2+, the system automatically checks and creates these four buckets on startup inside the scheduler (`ensure_all_buckets()`). If you start the scheduler first, this step is handled for you.
+
+However, if you want to create them manually or verify their existence beforehand, you can run the following commands:
 
 ```powershell
 # Using Docker to run the MinIO Client (mc) — no extra install needed

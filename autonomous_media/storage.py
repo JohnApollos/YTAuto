@@ -39,3 +39,13 @@ def get_object_data(bucket_name: str, object_name: str) -> bytes:
     finally:
         response.close()
         response.release_conn()
+
+def ensure_all_buckets() -> None:
+    buckets = [
+        "autonomous-media-raw",
+        "autonomous-media-transcripts",
+        "autonomous-media-renders",
+        "autonomous-media-branding"
+    ]
+    for bucket in buckets:
+        ensure_bucket(bucket)

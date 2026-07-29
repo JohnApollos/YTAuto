@@ -75,6 +75,12 @@ def start_scheduler():
         "analytics":     AnalyticsWorker(SessionLocal),
         "learning":      LearningWorker(SessionLocal),
     }
+    from autonomous_media.storage import ensure_all_buckets
+    try:
+        ensure_all_buckets()
+    except Exception as e:
+        print(f"Warning: Failed to ensure MinIO buckets on startup: {e}")
+
     scheduler = Scheduler(session_maker=SessionLocal, worker_registry=registry, max_concurrent_jobs=1)
     t = threading.Thread(target=scheduler.start, daemon=True, name="scheduler")
     t.start()
