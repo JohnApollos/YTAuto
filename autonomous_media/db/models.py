@@ -166,6 +166,7 @@ class Job(Base):
     channel_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("channels.id"), nullable=True)
     trace_id: Mapped[str] = mapped_column(String, index=True)
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # spec §12.1
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
