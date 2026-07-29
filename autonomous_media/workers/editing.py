@@ -18,6 +18,12 @@ class EditingWorker(Worker):
         if not clip_candidate_id:
             raise StageUnrecoverableError("Missing clip_candidate_id in job payload")
 
+        if isinstance(clip_candidate_id, str):
+            try:
+                clip_candidate_id = uuid.UUID(clip_candidate_id)
+            except ValueError:
+                raise StageUnrecoverableError(f"Invalid clip_candidate_id format: {clip_candidate_id}")
+
         clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == clip_candidate_id).first()
         if not clip_candidate:
             raise StageUnrecoverableError(f"ClipCandidate {clip_candidate_id} not found")

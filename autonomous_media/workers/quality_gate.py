@@ -19,6 +19,12 @@ class QualityGateWorker(Worker):
         if not clip_id:
             raise StageUnrecoverableError("Missing clip_id in job payload")
 
+        if isinstance(clip_id, str):
+            try:
+                clip_id = uuid.UUID(clip_id)
+            except ValueError:
+                raise StageUnrecoverableError(f"Invalid clip_id format: {clip_id}")
+
         clip = session.query(Clip).filter(Clip.id == clip_id).first()
         if not clip:
             raise StageUnrecoverableError(f"Clip {clip_id} not found")

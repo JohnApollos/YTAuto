@@ -21,6 +21,12 @@ class IntelligenceWorker(Worker):
         if not transcript_id:
             raise StageUnrecoverableError("Missing transcript_id in job payload")
 
+        if isinstance(transcript_id, str):
+            try:
+                transcript_id = uuid.UUID(transcript_id)
+            except ValueError:
+                raise StageUnrecoverableError(f"Invalid transcript_id format: {transcript_id}")
+
         transcript = session.query(Transcript).filter(Transcript.id == transcript_id).first()
         if not transcript:
             raise StageUnrecoverableError(f"Transcript {transcript_id} not found")
@@ -142,7 +148,10 @@ class IntelligenceWorker(Worker):
             # Query pgvector cosine distance
             # If distance < 0.15, it's a duplicate and we discard it
             is_duplicate = False
-            nearest_topic = session.query(Topic).order_by(Topic.embedding.cosine_distance(candidate_embedding)).first()
+            if session.bind.dialect.name == "sqlite":
+                nearest_topic = None
+            else:
+                nearest_topic = session.query(Topic).order_by(Topic.embedding.cosine_distance(candidate_embedding)).first()
             if nearest_topic:
                 distance = session.scalar(Topic.embedding.cosine_distance(candidate_embedding))
                 if distance is not None and distance < 0.15:
