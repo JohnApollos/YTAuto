@@ -153,7 +153,10 @@ class IntelligenceWorker(Worker):
             else:
                 nearest_topic = session.query(Topic).order_by(Topic.embedding.cosine_distance(candidate_embedding)).first()
             if nearest_topic:
-                distance = session.scalar(Topic.embedding.cosine_distance(candidate_embedding))
+                from sqlalchemy import select
+                distance = session.scalar(
+                    select(Topic.embedding.cosine_distance(candidate_embedding)).filter(Topic.id == nearest_topic.id)
+                )
                 if distance is not None and distance < 0.15:
                     logger.info(
                         f"Candidate duplicate discarded. Nearest topic distance: {distance:.4f}",
