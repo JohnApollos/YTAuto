@@ -181,8 +181,8 @@ class IntelligenceWorker(Worker):
         # Sort by weighted score descending
         final_candidates.sort(key=lambda x: x["weighted_score"], reverse=True)
         
-        # Keep top 3 candidates (spec selection rule)
-        selected_candidates = final_candidates[:3]
+        # Keep top 10 candidates
+        selected_candidates = final_candidates[:10]
 
         for rank, cand in enumerate(selected_candidates, start=1):
             # Create Topic row for pgvector uniqueness check on future videos
