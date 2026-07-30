@@ -135,3 +135,33 @@ def patch_clip(clip_id: str, body: ClipPatch, db: Session = Depends(get_db)):
         "id": str(clip.id),
         "status": clip.status,
     }
+
+
+@router.get("/{clip_id}/video")
+def get_clip_video(clip_id: str, db: Session = Depends(get_db)):
+    from fastapi.responses import StreamingResponse
+    try:
+        clip_uuid = uuid.UUID(clip_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid clip_id format")
+
+    clip = db.query(Clip).filter(Clip.id == clip_uuid).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    from autonomous_media.storage import get_minio_client
+    try:
+        client = get_minio_client()
+        response = client.get_object("autonomous-media-raw", clip.storage_key)
+        
+        def iter_file():
+            try:
+                for chunk in response.stream(32 * 1024):
+                    yield chunk
+            finally:
+                response.close()
+                response.release_conn()
+
+        return StreamingResponse(iter_file(), media_type="video/mp4")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch video from MinIO: {e}")

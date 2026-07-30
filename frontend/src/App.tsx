@@ -735,39 +735,50 @@ function App() {
                 </div>
               ) : (
                 reviewClips.map(clip => (
-                  <div key={clip.id} className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                        <span style={{ fontWeight: 'bold' }}>Clip ID: {clip.id.substring(0, 8)}...</span>
-                        <span className="badge badge-active">{clip.status}</span>
-                        <span className="text-muted">{clip.duration_s} seconds</span>
+                  <div key={clip.id} className="glass-panel" style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', padding: '20px' }}>
+                    <div style={{ width: '180px', height: '320px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'black', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', flexShrink: 0 }}>
+                      <video 
+                        src={`${API_BASE}/clips/${clip.id}/video`} 
+                        controls 
+                        preload="metadata"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </div>
+                    <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', height: '320px', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                          <span style={{ fontWeight: 'bold' }}>Clip ID: {clip.id.substring(0, 8)}...</span>
+                          <span className="badge badge-active">{clip.status}</span>
+                          <span className="text-muted">{clip.duration_s} seconds</span>
+                        </div>
+                        
+                        {/* Display Intelligence scoring details if present */}
+                        {clip.scores && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '16px', background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', fontSize: '0.85rem' }}>
+                            <div>Hook Strength: <strong style={{ color: 'var(--accent-primary)' }}>{clip.scores.hook_strength || 0}</strong></div>
+                            <div>Emotional Intensity: <strong style={{ color: 'var(--accent-primary)' }}>{clip.scores.emotional_intensity || 0}</strong></div>
+                            <div>Curiosity Gap: <strong style={{ color: 'var(--accent-primary)' }}>{clip.scores.curiosity_gap || 0}</strong></div>
+                            <div>Humor Score: <strong style={{ color: 'var(--accent-primary)' }}>{clip.scores.humor || 0}</strong></div>
+                          </div>
+                        )}
                       </div>
                       
-                      {/* Display Intelligence scoring details if present */}
-                      {clip.scores && (
-                        <div style={{ display: 'flex', gap: '16px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                          <span>Hook: {clip.scores.hook_strength || 0}</span>
-                          <span>Emotion: {clip.scores.emotional_intensity || 0}</span>
-                          <span>Curiosity: {clip.scores.curiosity_gap || 0}</span>
-                          <span>Humor: {clip.scores.humor || 0}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      <button 
-                        onClick={() => handleClipAction(clip.id, true)} 
-                        className="btn btn-success"
-                        style={{ padding: '8px 16px' }}
-                      >
-                        <Check size={16} /> Approve & Publish
-                      </button>
-                      <button 
-                        onClick={() => handleClipAction(clip.id, false)} 
-                        className="btn"
-                        style={{ padding: '8px 16px', backgroundColor: 'var(--danger)' }}
-                      >
-                        <X size={16} /> Reject
-                      </button>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <button 
+                          onClick={() => handleClipAction(clip.id, true)} 
+                          className="btn btn-success"
+                          style={{ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px' }}
+                        >
+                          <Check size={16} /> Approve & Publish
+                        </button>
+                        <button 
+                          onClick={() => handleClipAction(clip.id, false)} 
+                          className="btn"
+                          style={{ padding: '12px 24px', backgroundColor: 'var(--danger)' }}
+                        >
+                          <X size={16} /> Reject
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -792,12 +803,17 @@ function App() {
             ) : (
               <div className="grid-cards">
                 {publishedClips.map(clip => (
-                  <div key={clip.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ height: '140px', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Video size={40} color="var(--accent-primary)" />
+                  <div key={clip.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', padding: '16px' }}>
+                    <div style={{ height: '240px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'black', marginBottom: '16px' }}>
+                      <video 
+                        src={`${API_BASE}/clips/${clip.id}/video`} 
+                        controls 
+                        preload="metadata"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
                     </div>
                     <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem' }}>Clip {clip.id.substring(0, 8)}...</h4>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>Duration: {clip.duration_s}s</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>Duration: {clip.duration_s}s</div>
                     <span className="badge badge-completed" style={{ alignSelf: 'flex-start' }}>Published</span>
                   </div>
                 ))}
