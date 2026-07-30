@@ -51,62 +51,62 @@ class VisionWorker(Worker):
             if not cap.isOpened():
                 raise StageUnrecoverableError(f"Failed to open video file {video_path}")
 
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if fps <= 0:
-                fps = 30.0 # Default fallback
-            width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-            
-            if width <= 0 or height <= 0:
+            try:
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                if fps <= 0:
+                    fps = 30.0 # Default fallback
+                width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+                height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+                
+                if width <= 0 or height <= 0:
+                    raise StageUnrecoverableError(f"Invalid video dimensions: {width}x{height}")
+
+                # Aspect ratio of the original video
+                aspect_ratio = width / height
+
+                # We want to crop to vertical 9:16 aspect ratio
+                # crop_w / crop_h = 9/16
+                # In normalized coordinates, if crop_h_norm = 1.0 (full height),
+                # then crop_w_pixels = height * (9/16)
+                # crop_w_norm = crop_w_pixels / width = (height * 9/16) / width = (9/16) / aspect_ratio
+                crop_width_norm = (9.0 / 16.0) / aspect_ratio
+
+                # Seek to start of clip candidate (start_ms)
+                start_sec = clip_candidate.start_ms / 1000.0
+                end_sec = clip_candidate.end_ms / 1000.0
+                
+                start_frame = int(start_sec * fps)
+                end_frame = int(end_sec * fps)
+
+                # Sample key frames every 0.5 seconds
+                frame_step = int(fps * 0.5)
+                if frame_step <= 0:
+                    frame_step = 1
+
+                x_centers = []
+
+                # Initialize MediaPipe Face Detection
+                mp_face_detection = mp.solutions.face_detection
+                with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
+                    for frame_idx in range(start_frame, end_frame, frame_step):
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+
+                        # Convert BGR to RGB
+                        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        results = face_detection.process(rgb_frame)
+
+                        if results.detections:
+                            # Take the first detected face (usually speaker)
+                            detection = results.detections[0]
+                            bbox = detection.location_data.relative_bounding_box
+                            # Bounding box center x
+                            x_center = bbox.xmin + (bbox.width / 2.0)
+                            x_centers.append(x_center)
+            finally:
                 cap.release()
-                raise StageUnrecoverableError(f"Invalid video dimensions: {width}x{height}")
-
-            # Aspect ratio of the original video
-            aspect_ratio = width / height
-
-            # We want to crop to vertical 9:16 aspect ratio
-            # crop_w / crop_h = 9/16
-            # In normalized coordinates, if crop_h_norm = 1.0 (full height),
-            # then crop_w_pixels = height * (9/16)
-            # crop_w_norm = crop_w_pixels / width = (height * 9/16) / width = (9/16) / aspect_ratio
-            crop_width_norm = (9.0 / 16.0) / aspect_ratio
-
-            # Seek to start of clip candidate (start_ms)
-            start_sec = clip_candidate.start_ms / 1000.0
-            end_sec = clip_candidate.end_ms / 1000.0
-            
-            start_frame = int(start_sec * fps)
-            end_frame = int(end_sec * fps)
-
-            # Sample key frames every 0.5 seconds
-            frame_step = int(fps * 0.5)
-            if frame_step <= 0:
-                frame_step = 1
-
-            x_centers = []
-
-            # Initialize MediaPipe Face Detection
-            mp_face_detection = mp.solutions.face_detection
-            with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
-                for frame_idx in range(start_frame, end_frame, frame_step):
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-
-                    # Convert BGR to RGB
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    results = face_detection.process(rgb_frame)
-
-                    if results.detections:
-                        # Take the first detected face (usually speaker)
-                        detection = results.detections[0]
-                        bbox = detection.location_data.relative_bounding_box
-                        # Bounding box center x
-                        x_center = bbox.xmin + (bbox.width / 2.0)
-                        x_centers.append(x_center)
-
-            cap.release()
 
             # 3. Compute crop region (median bounding box center)
             if x_centers:
