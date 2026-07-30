@@ -15,7 +15,20 @@ class VisionWorker(Worker):
 
     def process(self, session: Session, job: Job) -> JobResult:
         import cv2
-        import mediapipe as mp
+        import urllib.request
+
+        # Download face cascade xml if not present
+        cascade_path = "haarcascade_frontalface_default.xml"
+        if not os.path.exists(cascade_path):
+            try:
+                url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+                urllib.request.urlretrieve(url, cascade_path)
+            except Exception as e:
+                raise StageUnrecoverableError(f"Failed to download Haar cascade file: {e}")
+
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        if face_cascade.empty():
+            raise StageUnrecoverableError("Loaded face cascade is empty")
         clip_candidate_id = job.payload.get("clip_candidate_id")
         if not clip_candidate_id:
             raise StageUnrecoverableError("Missing clip_candidate_id in job payload")
@@ -85,26 +98,22 @@ class VisionWorker(Worker):
 
                 x_centers = []
 
-                # Initialize MediaPipe Face Detection
-                mp_face_detection = mp.solutions.face_detection
-                with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
-                    for frame_idx in range(start_frame, end_frame, frame_step):
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-                        ret, frame = cap.read()
-                        if not ret:
-                            break
+                # Run face detection on key frames using Haar Cascade
+                for frame_idx in range(start_frame, end_frame, frame_step):
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
 
-                        # Convert BGR to RGB
-                        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        results = face_detection.process(rgb_frame)
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-                        if results.detections:
-                            # Take the first detected face (usually speaker)
-                            detection = results.detections[0]
-                            bbox = detection.location_data.relative_bounding_box
-                            # Bounding box center x
-                            x_center = bbox.xmin + (bbox.width / 2.0)
-                            x_centers.append(x_center)
+                    if len(faces) > 0:
+                        # Take the first detected face (usually speaker)
+                        (x, y, w, h) = faces[0]
+                        # Bounding box center x normalized
+                        x_center = (x + w / 2.0) / width
+                        x_centers.append(x_center)
             finally:
                 cap.release()
 

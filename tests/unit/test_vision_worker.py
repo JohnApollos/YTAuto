@@ -64,19 +64,11 @@ def test_vision_worker_success(mock_exists, mock_emit, mock_download):
     mock_cap.isOpened.return_value = True
     mock_cv2.VideoCapture.return_value = mock_cap
     
-    # Mock MediaPipe Face Detection
-    mock_face_detection_instance = MagicMock()
-    mock_detection = MagicMock()
-    mock_bbox = MagicMock()
-    mock_bbox.xmin = 0.4
-    mock_bbox.width = 0.2
-    mock_detection.location_data.relative_bounding_box = mock_bbox
-    mock_results = MagicMock()
-    mock_results.detections = [mock_detection]
-    mock_face_detection_instance.process.return_value = mock_results
-    
-    mock_mp.solutions.face_detection.FaceDetection.return_value = mock_face_detection_instance
-    mock_face_detection_instance.__enter__.return_value = mock_face_detection_instance
+    # Mock OpenCV CascadeClassifier
+    mock_cascade = MagicMock()
+    mock_cascade.empty.return_value = False
+    mock_cascade.detectMultiScale.return_value = [(400, 300, 200, 200)]
+    mock_cv2.CascadeClassifier.return_value = mock_cascade
     
     worker = VisionWorker(MagicMock())
     from autonomous_media.workers.base import JobResult
@@ -85,7 +77,7 @@ def test_vision_worker_success(mock_exists, mock_emit, mock_download):
     assert isinstance(result, JobResult)
     mock_download.assert_called_once_with("autonomous-media-raw", "raw/some-uuid/original.mp4", ANY)
     mock_cv2.VideoCapture.assert_called_once()
-    mock_face_detection_instance.process.assert_called()
+    mock_cascade.detectMultiScale.assert_called()
     mock_emit.assert_called_once_with(
         event_type="video.analyzed",
         trace_id="test-trace-vision",
