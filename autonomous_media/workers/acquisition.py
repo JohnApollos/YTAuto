@@ -84,6 +84,9 @@ class AcquisitionWorker(Worker):
             if "youtube.com" not in item.url and "youtu.be" not in item.url:
                 raise StageUnrecoverableError(f"SSRF guard: unexpected URL domain in fetch: {item.url}")
 
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            cookies_path = os.path.join(project_root, "cookies.txt")
+
             with tempfile.TemporaryDirectory() as temp_dir:
                 video_filename = f"{item.external_id}.mp4"
                 video_path = os.path.join(temp_dir, video_filename)
@@ -97,6 +100,12 @@ class AcquisitionWorker(Worker):
                     'no_warnings': True,
                     'merge_output_format': 'mp4',
                 }
+                if os.path.exists(cookies_path):
+                    ydl_opts['cookiefile'] = cookies_path
+                    logger.info("Using cookies.txt file for yt-dlp authentication", extra={"trace_id": trace_id})
+                else:
+                    logger.warning("No cookies.txt file found. If download fails due to bot detection, place cookies.txt in project root.", extra={"trace_id": trace_id})
+
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([item.url])
