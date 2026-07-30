@@ -200,6 +200,7 @@ class PublishingWorker(Worker):
             inventory_item.status = "published"
             inventory_item.published_at = datetime.now(timezone.utc)
             inventory_item.external_video_id = youtube_video_id
+            clip.status = "published"
             session.commit()
             
 
