@@ -141,10 +141,11 @@ class PublishingWorker(Worker):
                 oauth_data = {"token": os.environ.get("YOUTUBE_OAUTH_TOKEN")}
 
             if not oauth_data:
-                # If no credentials exist in MVP/tests, we mock it or allow running with mock
-                # To be robust, we allow mock upload if YOUTUBE_OAUTH_TOKEN is 'mock'
+                # Only allow mock flow explicitly in test environments.
+                # In all other cases, raise an unrecoverable error so misconfigured
+                # channels fail loudly rather than generating phantom mock uploads.
                 logger.info("No credentials found, checking for mock flow", extra={"trace_id": job.trace_id})
-                if os.environ.get("YOUTUBE_API_ENV") == "test" or not oauth_data:
+                if os.environ.get("YOUTUBE_API_ENV") == "test":
                     youtube_video_id = f"mock_{uuid.uuid4().hex[:10]}"
                     logger.info(f"Mock publishing successful. Video ID: {youtube_video_id}", extra={"trace_id": job.trace_id})
                 else:

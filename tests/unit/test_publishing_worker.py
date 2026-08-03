@@ -140,4 +140,5 @@ def test_publishing_worker_success(mock_exists, mock_get_object, mock_rights_gat
     
     assert inventory_item.status == "published"
     assert inventory_item.external_video_id == "yt_vid_123"
+    assert clip.status == "published"
     mock_session.add.assert_any_call(ANY)

@@ -1,6 +1,7 @@
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from autonomous_media.db.session import get_db
@@ -47,6 +48,40 @@ def list_clips(
     return {"clips": clips}
 
 
+# IMPORTANT: /{clip_id}/video must be registered BEFORE /{clip_id} so FastAPI
+# does not greedily match the literal string "video" as a clip UUID.
+@router.get("/{clip_id}/video")
+def get_clip_video(clip_id: str, db: Session = Depends(get_db)):
+    try:
+        clip_uuid = uuid.UUID(clip_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid clip_id format")
+
+    clip = db.query(Clip).filter(Clip.id == clip_uuid).first()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    if not clip.storage_key:
+        raise HTTPException(status_code=404, detail="Video not ready yet — rendering still in progress")
+
+    from autonomous_media.storage import get_minio_client
+    try:
+        client = get_minio_client()
+        response = client.get_object("autonomous-media-raw", clip.storage_key)
+
+        def iter_file():
+            try:
+                for chunk in response.stream(32 * 1024):
+                    yield chunk
+            finally:
+                response.close()
+                response.release_conn()
+
+        return StreamingResponse(iter_file(), media_type="video/mp4")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch video from MinIO: {e}")
+
+
 @router.get("/{clip_id}")
 def get_clip(clip_id: str, db: Session = Depends(get_db)):
     try:
@@ -89,6 +124,10 @@ def patch_clip(clip_id: str, body: ClipPatch, db: Session = Depends(get_db)):
     if body.status not in {"ready", "qc_failed"}:
         raise HTTPException(status_code=400, detail="Invalid status value. Must be 'ready' or 'qc_failed'")
 
+    # Guard: if already published, reject re-approval to prevent duplicate uploads
+    if clip.status == "published":
+        raise HTTPException(status_code=409, detail="Clip already published. Cannot re-approve.")
+
     clip.status = body.status
     db.flush()
 
@@ -96,20 +135,22 @@ def patch_clip(clip_id: str, body: ClipPatch, db: Session = Depends(get_db)):
 
     if body.status == "ready":
         if inventory_item:
+            # Guard: if the inventory item is already published, do nothing
+            if inventory_item.status == "published":
+                db.commit()
+                db.refresh(clip)
+                return {"id": str(clip.id), "status": clip.status}
+
             inventory_item.status = "ready"
             db.flush()
 
-            # Check if a publishing job already exists for this inventory item
-            existing_jobs = db.query(Job).filter(
+            # Check if ANY publishing job (active or completed) already exists for this
+            # inventory item. This prevents duplicate uploads when the quality_gate worker
+            # has already automatically enqueued a publishing job.
+            has_publishing_job = db.query(Job).filter(
                 Job.type == "publishing",
-                Job.status.in_(["queued", "running", "retrying"])
-            ).all()
-
-            has_publishing_job = False
-            for job in existing_jobs:
-                if str(job.payload.get("inventory_item_id")) == str(inventory_item.id):
-                    has_publishing_job = True
-                    break
+                Job.payload["inventory_item_id"].astext == str(inventory_item.id)
+            ).first() is not None
 
             if not has_publishing_job:
                 new_job = Job(
@@ -135,33 +176,3 @@ def patch_clip(clip_id: str, body: ClipPatch, db: Session = Depends(get_db)):
         "id": str(clip.id),
         "status": clip.status,
     }
-
-
-@router.get("/{clip_id}/video")
-def get_clip_video(clip_id: str, db: Session = Depends(get_db)):
-    from fastapi.responses import StreamingResponse
-    try:
-        clip_uuid = uuid.UUID(clip_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid clip_id format")
-
-    clip = db.query(Clip).filter(Clip.id == clip_uuid).first()
-    if not clip:
-        raise HTTPException(status_code=404, detail="Clip not found")
-
-    from autonomous_media.storage import get_minio_client
-    try:
-        client = get_minio_client()
-        response = client.get_object("autonomous-media-raw", clip.storage_key)
-        
-        def iter_file():
-            try:
-                for chunk in response.stream(32 * 1024):
-                    yield chunk
-            finally:
-                response.close()
-                response.release_conn()
-
-        return StreamingResponse(iter_file(), media_type="video/mp4")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch video from MinIO: {e}")

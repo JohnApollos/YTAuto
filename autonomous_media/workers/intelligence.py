@@ -110,6 +110,8 @@ class IntelligenceWorker(Worker):
             raise StageUnrecoverableError(f"Failed to initialize SentenceTransformer: {e}")
 
         final_candidates = []
+        # Track embeddings accepted in this batch to deduplicate within the same video
+        accepted_embeddings: list[list[float]] = []
 
         for cand in top_candidates:
             # Format prompt
@@ -142,30 +144,48 @@ class IntelligenceWorker(Worker):
                 scores.get("story_completeness", 0) * 0.8
             )
 
-            # Novelty/dedup check via pgvector
+            # Novelty/dedup check
             candidate_embedding = list(embed_model.encode(cand["text"]))
-            
-            # Query pgvector cosine distance
-            # If distance < 0.15, it's a duplicate and we discard it
+
+            # 1. Check against already-accepted candidates in this same batch
+            #    (Topics are only written after selection, so DB check alone misses intra-batch dupes)
+            import numpy as np
             is_duplicate = False
-            if session.bind.dialect.name == "sqlite":
-                nearest_topic = None
-            else:
-                nearest_topic = session.query(Topic).order_by(Topic.embedding.cosine_distance(candidate_embedding)).first()
-            if nearest_topic:
-                from sqlalchemy import select
-                distance = session.scalar(
-                    select(Topic.embedding.cosine_distance(candidate_embedding)).filter(Topic.id == nearest_topic.id)
-                )
-                if distance is not None and distance < 0.15:
+            for prev_emb in accepted_embeddings:
+                # Cosine similarity via dot product (embeddings are unit-normalised by SentenceTransformer)
+                similarity = float(np.dot(candidate_embedding, prev_emb))
+                # cosine_distance = 1 - similarity; distance < 0.15 means similarity > 0.85
+                if similarity > 0.85:
                     logger.info(
-                        f"Candidate duplicate discarded. Nearest topic distance: {distance:.4f}",
+                        f"Candidate intra-batch duplicate discarded. Cosine similarity: {similarity:.4f}",
                         extra={"trace_id": job.trace_id}
                     )
                     is_duplicate = True
-            
+                    break
+
+            if not is_duplicate:
+                # 2. Check against previously accepted topics in the database (pgvector)
+                if session.bind.dialect.name == "sqlite":
+                    nearest_topic = None
+                else:
+                    nearest_topic = session.query(Topic).order_by(Topic.embedding.cosine_distance(candidate_embedding)).first()
+                if nearest_topic:
+                    from sqlalchemy import select
+                    distance = session.scalar(
+                        select(Topic.embedding.cosine_distance(candidate_embedding)).filter(Topic.id == nearest_topic.id)
+                    )
+                    if distance is not None and distance < 0.15:
+                        logger.info(
+                            f"Candidate duplicate discarded. Nearest topic distance: {distance:.4f}",
+                            extra={"trace_id": job.trace_id}
+                        )
+                        is_duplicate = True
+
             if is_duplicate:
                 continue
+
+            # Accepted — track embedding for intra-batch dedup of subsequent candidates
+            accepted_embeddings.append(candidate_embedding)
 
             final_candidates.append({
                 **cand,
