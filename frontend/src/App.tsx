@@ -66,6 +66,7 @@ function App() {
   const [sources, setSources] = useState<ContentSource[]>([]);
   const [newSource, setNewSource] = useState({
     external_ref: '',
+    type: 'youtube_channel',
     poll_interval_minutes: 60
   });
 
@@ -277,7 +278,7 @@ function App() {
       return;
     }
     if (!newSource.external_ref) {
-      showMessage('YouTube Channel ID is required', 'danger');
+      showMessage('Source reference (Channel ID or Name) is required', 'danger');
       return;
     }
     try {
@@ -288,7 +289,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel_id: selectedChannelId,
-          type: 'youtube_channel',
+          type: newSource.type,
           external_ref: newSource.external_ref,
           config: {
             api_key: apiKey,
@@ -297,8 +298,8 @@ function App() {
         })
       });
       if (!res.ok) throw new Error('Failed to add source');
-      showMessage('YouTube source added successfully!', 'success');
-      setNewSource({ external_ref: '', poll_interval_minutes: 60 });
+      showMessage('Content source added successfully!', 'success');
+      setNewSource({ external_ref: '', type: 'youtube_channel', poll_interval_minutes: 60 });
       fetchSources(selectedChannelId);
     } catch (err: any) {
       showMessage(err.message, 'danger');
@@ -571,10 +572,18 @@ function App() {
                   </div>
 
                   <form onSubmit={handleAddSource} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <h4 className="text-muted">Add YouTube Source Channel</h4>
+                    <h4 className="text-muted">Add Content Source</h4>
+                    <select 
+                      value={newSource.type} 
+                      onChange={e => setNewSource({...newSource, type: e.target.value})}
+                      style={{ padding: '10px', background: 'rgba(15,23,42,0.9)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '8px' }}
+                    >
+                      <option value="youtube_channel">YouTube Channel</option>
+                      <option value="curated_story">Curated Stories (Reddit/Manual)</option>
+                    </select>
                     <input 
                       type="text" 
-                      placeholder="YouTube Channel ID (e.g. UCxxxxxxxxxxxxx)" 
+                      placeholder={newSource.type === 'youtube_channel' ? "YouTube Channel ID (e.g. UCxxxx)" : "Source Reference (e.g. reddit_aita)"} 
                       value={newSource.external_ref}
                       onChange={e => setNewSource({...newSource, external_ref: e.target.value})}
                       style={{ padding: '10px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid var(--border-color)', borderRadius: '8px' }}
