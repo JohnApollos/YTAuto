@@ -1,18 +1,29 @@
 from unittest.mock import patch, MagicMock, ANY
 import uuid
 import pytest
+import os
 from autonomous_media.workers.publishing import PublishingWorker
 from autonomous_media.db.models import Job, InventoryItem, Clip, Channel, ClipCandidate, SourceVideo, SourcePost, Transcript
 from autonomous_media.exceptions import StageUnrecoverableError, RightsBlockedError
+
+# Real os.path.exists to fall back on
+_real_exists = os.path.exists
+
+def mock_exists_side_effect(path):
+    # If checking for our temporary downloaded video, return True
+    if str(path).endswith("rendered.mp4") or "original.mp4" in str(path) or str(path).endswith(".mp4"):
+        return True
+    return _real_exists(path)
 
 @patch("autonomous_media.workers.publishing.download_file")
 @patch("autonomous_media.workers.publishing.emit_event")
 @patch("autonomous_media.workers.publishing.RightsGate")
 @patch("autonomous_media.storage.get_object_data")
-@patch("autonomous_media.workers.publishing.os.path.exists", return_value=True)
+@patch("autonomous_media.workers.publishing.os.path.exists")
 @patch("shutil.copy2")
 @patch("builtins.open")
 def test_publishing_worker_success(mock_open, mock_copy, mock_exists, mock_get_object, mock_rights_gate_class, mock_emit, mock_download):
+    mock_exists.side_effect = mock_exists_side_effect
     mock_get_object.return_value = b"[]"
     item_id = uuid.uuid4()
     clip_id = uuid.uuid4()
@@ -115,10 +126,11 @@ def test_publishing_worker_success(mock_open, mock_copy, mock_exists, mock_get_o
 @patch("autonomous_media.workers.publishing.emit_event")
 @patch("autonomous_media.workers.publishing.RightsGate")
 @patch("autonomous_media.storage.get_object_data")
-@patch("autonomous_media.workers.publishing.os.path.exists", return_value=True)
+@patch("autonomous_media.workers.publishing.os.path.exists")
 @patch("shutil.copy2")
 @patch("builtins.open")
 def test_publishing_worker_story_success(mock_open, mock_copy, mock_exists, mock_get_object, mock_rights_gate_class, mock_emit, mock_download):
+    mock_exists.side_effect = mock_exists_side_effect
     mock_get_object.return_value = b"[]"
     item_id = uuid.uuid4()
     clip_id = uuid.uuid4()
