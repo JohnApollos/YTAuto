@@ -9,7 +9,7 @@ from autonomous_media.exceptions import StageUnrecoverableError, RightsBlockedEr
 @patch("autonomous_media.workers.publishing.emit_event")
 @patch("autonomous_media.workers.publishing.RightsGate")
 @patch("autonomous_media.storage.get_object_data")
-@patch("os.path.exists", return_value=True)
+@patch("autonomous_media.workers.publishing.os.path.exists", return_value=True)
 @patch("shutil.copy2")
 @patch("builtins.open")
 def test_publishing_worker_success(mock_open, mock_copy, mock_exists, mock_get_object, mock_rights_gate_class, mock_emit, mock_download):
@@ -115,7 +115,7 @@ def test_publishing_worker_success(mock_open, mock_copy, mock_exists, mock_get_o
 @patch("autonomous_media.workers.publishing.emit_event")
 @patch("autonomous_media.workers.publishing.RightsGate")
 @patch("autonomous_media.storage.get_object_data")
-@patch("os.path.exists", return_value=True)
+@patch("autonomous_media.workers.publishing.os.path.exists", return_value=True)
 @patch("shutil.copy2")
 @patch("builtins.open")
 def test_publishing_worker_story_success(mock_open, mock_copy, mock_exists, mock_get_object, mock_rights_gate_class, mock_emit, mock_download):
