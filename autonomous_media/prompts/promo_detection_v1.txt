@@ -1,0 +1,13 @@
+SYSTEM:
+You are classifying short transcript windows to identify promotional/sponsored
+content. You will receive a JSON array of windows, each with an "id" and "text".
+Return ONLY JSON matching this schema, nothing else:
+{"promotional_ids": [<list of integer ids of promotional windows>]}
+
+A window is promotional if it contains: sponsor reads, product placements, discount
+codes, calls to visit a website/use a promo code, or any advertisement for a third-party
+product or service. It is NOT promotional if it merely mentions a company name in passing
+or discusses a product as part of the topic.
+
+USER:
+Windows: {windows}

@@ -1,7 +1,11 @@
 from fastapi import APIRouter
 from typing import List, Dict
+from autonomous_media.api.curated_stories import router as curated_stories_router
+from autonomous_media.api.background_assets import router as background_assets_router
 
 router = APIRouter()
+router.include_router(curated_stories_router)
+router.include_router(background_assets_router)
 
 # Mock Data for development of UI
 @router.get("/api/workflows")

@@ -10,6 +10,7 @@ from autonomous_media.storage import get_object_data
 from autonomous_media.logging import get_logger, emit_event
 from autonomous_media.runtime.manager import stage_manager, InferenceRequest
 from autonomous_media.exceptions import StageUnrecoverableError
+from autonomous_media.workers.promo_filter import detect_promo_segments, filter_promo_overlap, TimeRange
 
 logger = get_logger("workers.intelligence")
 
@@ -47,12 +48,46 @@ class IntelligenceWorker(Worker):
             logger.info("Transcript contains no words. Skipping.", extra={"trace_id": job.trace_id})
             return JobResult()
 
+        # --- Promo-segment detection (spec §11.8) ---
+        # Runs once per transcript; result cached on transcript.promo_segments
+        # so it's never recomputed on retry.
+        if transcript.promo_segments is not None:
+            promo_ranges = [
+                TimeRange(start_ms=r["start_ms"], end_ms=r["end_ms"])
+                for r in transcript.promo_segments
+            ]
+            logger.info(
+                f"Loaded {len(promo_ranges)} cached promo segments",
+                extra={"trace_id": job.trace_id}
+            )
+        else:
+            promo_ranges = detect_promo_segments(words, model_manager=stage_manager)
+            transcript.promo_segments = [
+                {"start_ms": r.start_ms, "end_ms": r.end_ms} for r in promo_ranges
+            ]
+            session.flush()  # persist cache before heavy work below
+            logger.info(
+                f"Detected {len(promo_ranges)} promo segments; cached on transcript",
+                extra={"trace_id": job.trace_id}
+            )
+
         # 2. Sliding-window candidate generation
         candidates = self._generate_candidates(words)
         logger.info(
             f"Generated {len(candidates)} raw sliding-window candidates",
             extra={"trace_id": job.trace_id}
         )
+
+        # --- Hard-exclude any candidate overlapping a promo segment (spec §11.8) ---
+        if promo_ranges:
+            pre_filter_count = len(candidates)
+            candidates = filter_promo_overlap(candidates, promo_ranges, max_overlap=0.20)
+            excluded = pre_filter_count - len(candidates)
+            if excluded > 0:
+                logger.info(
+                    f"Excluded {excluded} candidates overlapping promo segments",
+                    extra={"trace_id": job.trace_id}
+                )
 
         # 3. Heuristic first-pass filter
         passed_candidates = []

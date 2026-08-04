@@ -69,12 +69,19 @@ def test_editing_worker_success(mock_emit, mock_put_object, mock_get_object):
     
     assert isinstance(result, JobResult)
     mock_get_object.assert_called_once()
+    # New: editing worker uploads .ass (ASS subtitle) not .srt
     mock_put_object.assert_called_once_with(
         "autonomous-media-raw",
-        f"srt/{candidate_id}.srt",
+        f"srt/{candidate_id}.ass",
         ANY,
         content_type="text/plain"
     )
-    
+
+    # Verify the rendering job payload carries the ass_storage_key
+    added_jobs = [call.args[0] for call in mock_session.add.call_args_list
+                  if hasattr(call.args[0], 'type') and getattr(call.args[0], 'type', None) == 'rendering']
+    assert len(added_jobs) == 1, "Expected exactly one rendering job to be enqueued"
+    assert added_jobs[0].payload.get("ass_storage_key") == f"srt/{candidate_id}.ass"
+
     # Check that Clip row and next job were added
     mock_session.add.assert_any_call(ANY)

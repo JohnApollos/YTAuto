@@ -13,6 +13,55 @@ Next milestone.
 
 ---
 
+## [1.5.0] — Spec v1.5 Upgrade — 2026-08-04
+
+Implements all new features from Technical Specification v1.5 excluding §29 (licensing/trust model, deferred). Zero breaking changes to the existing podcast-clipping pipeline.
+
+### Added — Promotional Segment Filter (spec §11.8)
+- `autonomous_media/workers/promo_filter.py` — two-stage cascade: cheap keyword heuristics first (`PROMO_MARKERS` list), then batched LLM classification on borderline windows only. Output is merged into contiguous promo blocks.
+- `autonomous_media/prompts/promo_detection_v1.txt` — versioned LLM prompt for borderline classification.
+- `autonomous_media/prompts/__init__.py` — new module exposing all prompt constants as importable names; replaces reading raw `.txt` files inline across workers.
+- **Integrated into `IntelligenceWorker`**: promo detection runs once per transcript before candidate generation. Result is cached on `transcripts.promo_segments` so retries are free. Candidates with >20% promo overlap are hard-excluded before scoring.
+
+### Added — Word-Level `.ass` Caption Renderer (spec §12.6)
+- `autonomous_media/workers/captions.py` — full Advanced SubStation Alpha (`.ass`) subtitle generator. Replaces the previous SRT/`drawtext` approach.
+  - Three named presets: `hormozi_bold` (Montserrat ExtraBold 84pt), `anton_punchy` (Anton 90pt), `poppins_soft` (Poppins Bold 76pt). Fallback: `default`.
+  - Chunks word timestamps into 2–5 word groups; breaks early on sentence-ending punctuation.
+  - Uppercase, white text, black 4px outline, 220px bottom margin at 1080×1920 — optimised for Shorts.
+- **`EditingWorker` updated**: generates the `.ass` file, uploads it to MinIO at `srt/{clip_candidate_id}.ass`, and passes `ass_storage_key` to the rendering job payload.
+- **`RenderingWorker` updated**: downloads the `.ass` file and applies `ass=<path>` video filter in the single FFmpeg encode pass (no second FFmpeg call).
+
+### Added — Curated Story Pipeline (spec §30)
+- `autonomous_media/workers/narration.py` — Piper TTS wrapper. Runs Piper as a subprocess (CPU-only, no VRAM contention). Includes `prepare_script()` for Reddit-style story cleaning and `narrate()` for WAV generation.
+- `autonomous_media/prompts/script_prep_v1.txt` — LLM prompt that reformats Reddit posts for natural spoken pacing (expands AITA/NTA/YTA abbreviations, removes markdown).
+- `autonomous_media/api/curated_stories.py` — `POST /curated-stories` (submit story, enqueues `script_preparation` job) + `GET /curated-stories` (list submissions).
+- `autonomous_media/api/background_assets.py` — Full CRUD for the pre-vetted background footage library (`GET`, `POST`, `PATCH /{id}`, `DELETE /{id}` with soft-delete).
+
+### Changed — Database Schema (spec §8.3, §30.6)
+- `autonomous_media/db/models.py`:
+  - **New table `source_posts`**: operator-submitted stories; `status` tracks `pending → scripting → narrating → transcribing → rendering → done`.
+  - **New table `background_assets`**: footage library with `storage_key`, `license_type`, `tags`, soft-delete via `status`.
+  - **New table `users`**: backs JWT auth (§14.3); `role` is `operator | local_admin`; `channel_scope` list restricts per-channel access.
+  - `Channel`: added `voice_profile` (Piper voice identifier for curated_story channels).
+  - `Transcript`: `source_video_id` made nullable; added `source_post_id` FK; added `promo_segments` JSON cache column.
+  - `Clip`: `clip_candidate_id` made nullable; added `source_post_id` and `background_asset_id` FKs.
+- `autonomous_media/db/migrations/versions/002_v1_5_schema.py` — new Alembic migration covering all of the above. Run `alembic upgrade head` after pulling.
+
+### Added — Operator Dashboard (spec §31)
+- `frontend/src/App.tsx` — four new sidebar pages:
+  - **Curated Stories**: story submission form + live status list; filters sources to `curated_story` type automatically.
+  - **Background Assets**: register/tag/retire footage; license badge colours (green=owned, blue=licensed, amber=unknown).
+  - **Rights & Compliance**: per-source rights override with evidence ref; full source list with inline Review buttons.
+  - *(System Health and Pipeline Overview already existed; now clearly separated in the nav)*.
+
+### Added — Startup Launcher (spec §13.6)
+- `Start-Autonomous-Media.bat` (project root) — double-click launcher; handles Docker startup, `docker compose`, `llama-server`, and health polling. Times out with a clear error if the system doesn't respond in 2 minutes.
+
+### Changed — API Routes
+- `autonomous_media/api/routes.py`: registered `curated_stories_router` and `background_assets_router`.
+
+---
+
 ## [0.8.0] — Phase 1 & 2 Implementation: Pipeline & AI Backend MVP — 2026-07-29
 
 This release completes Phase 1 and Phase 2, delivering a fully operational pipeline from YouTube channel polling to AI clipping, auto-editing, and publication.

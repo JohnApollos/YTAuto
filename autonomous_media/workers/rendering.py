@@ -8,6 +8,7 @@ from autonomous_media.db.models import Job, Clip, ClipCandidate, SourceVideo
 from autonomous_media.storage import download_file, upload_file
 from autonomous_media.logging import get_logger, emit_event
 from autonomous_media.exceptions import StageUnrecoverableError
+from pathlib import Path
 
 logger = get_logger("workers.rendering")
 
@@ -16,6 +17,7 @@ class RenderingWorker(Worker):
 
     def process(self, session: Session, job: Job) -> JobResult:
         clip_id = job.payload.get("clip_id")
+        ass_storage_key = job.payload.get("ass_storage_key")
         if not clip_id:
             raise StageUnrecoverableError("Missing clip_id in job payload")
 
@@ -39,10 +41,12 @@ class RenderingWorker(Worker):
         with tempfile.TemporaryDirectory() as temp_dir:
             video_filename = "original.mp4"
             srt_filename = "captions.srt"
+            ass_filename = "captions.ass"
             output_filename = "output.mp4"
 
             video_path = os.path.join(temp_dir, video_filename)
             srt_path = os.path.join(temp_dir, srt_filename)
+            ass_path = os.path.join(temp_dir, ass_filename)
             output_path = os.path.join(temp_dir, output_filename)
 
             # 1. Fetch raw original video and srt from MinIO
@@ -51,13 +55,19 @@ class RenderingWorker(Worker):
             except Exception as e:
                 raise StageUnrecoverableError(f"Failed to download video from MinIO: {e}")
 
-            srt_storage_key = f"srt/{clip_candidate.id}.srt"
-            try:
-                download_file("autonomous-media-raw", srt_storage_key, srt_path)
-            except Exception as e:
-                raise StageUnrecoverableError(f"Failed to download SRT from MinIO: {e}")
+            if ass_storage_key:
+                try:
+                    download_file("autonomous-media-raw", ass_storage_key, ass_path)
+                except Exception as e:
+                    raise StageUnrecoverableError(f"Failed to download ASS from MinIO: {e}")
+            else:
+                srt_storage_key = f"srt/{clip_candidate.id}.srt"
+                try:
+                    download_file("autonomous-media-raw", srt_storage_key, srt_path)
+                except Exception as e:
+                    raise StageUnrecoverableError(f"Failed to download SRT from MinIO: {e}")
 
-            if not os.path.exists(video_path) or not os.path.exists(srt_path):
+            if not os.path.exists(video_path) or (not os.path.exists(srt_path) and not os.path.exists(ass_path)):
                 raise StageUnrecoverableError("Downloaded input files for rendering not found")
 
             # 2. Get video dimensions to calculate crop default if needed
@@ -94,10 +104,14 @@ class RenderingWorker(Worker):
             video = video.filter('crop', f"in_w*{crop_w_norm}", "in_h", f"in_w*{crop_x_norm}", 0)
             video = video.filter('scale', 1080, 1920)
             
-            # Burn subtitles using relative filename (run in temp_dir to avoid drive letter colon escaping issues)
-            # Escaping filename for FFmpeg subtitles filter: replacing single backslashes and single quotes
-            escaped_srt_filename = srt_filename.replace('\\', '/').replace(':', '\\:')
-            video = video.filter('subtitles', escaped_srt_filename, force_style='FontSize=24,PrimaryColour=&H00FFFFFF')
+            if ass_storage_key:
+                escaped_ass_filename = ass_filename.replace('\\', '/').replace(':', '\\:')
+                video = video.filter('ass', escaped_ass_filename)
+            else:
+                # Burn subtitles using relative filename (run in temp_dir to avoid drive letter colon escaping issues)
+                # Escaping filename for FFmpeg subtitles filter: replacing single backslashes and single quotes
+                escaped_srt_filename = srt_filename.replace('\\', '/').replace(':', '\\:')
+                video = video.filter('subtitles', escaped_srt_filename, force_style='FontSize=24,PrimaryColour=&H00FFFFFF')
 
             # 4. Compile and Run FFmpeg with hardware-encode fallback
             # We compile the graph to get arguments, and then run it with custom cwd=temp_dir

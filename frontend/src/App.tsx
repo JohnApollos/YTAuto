@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, Video, LayoutDashboard, Settings, RefreshCw, Check, X, Shield, Key, Database } from 'lucide-react';
+import { Activity, Video, LayoutDashboard, Settings, RefreshCw, Check, X, Shield, Key, Database, FileText, Film, BookOpen, Heart } from 'lucide-react';
 import './index.css';
 
 const API_BASE = window.location.origin.includes('5173') || window.location.origin.includes('3000')
@@ -90,7 +90,16 @@ function App() {
   // Review Clips & Assets
   const [reviewClips, setReviewClips] = useState<Clip[]>([]);
   const [publishedClips, setPublishedClips] = useState<Clip[]>([]);
-  
+
+  // Curated Stories
+  const [stories, setStories] = useState<any[]>([]);
+  const [storySourceId, setStorySourceId] = useState('');
+  const [newStory, setNewStory] = useState({ title: '', body_text: '', source_url: '', author: '', subreddit: '' });
+
+  // Background Assets
+  const [bgAssets, setBgAssets] = useState<any[]>([]);
+  const [newAsset, setNewAsset] = useState({ storage_key: '', source_url: '', license_type: 'owned', license_evidence_ref: '', tags: '' });
+
   // Status/Messages
   const [message, setMessage] = useState({ text: '', type: '' });
 
@@ -166,7 +175,6 @@ function App() {
     try {
       const [passedRes, pubRes] = await Promise.all([
         fetch(`${API_BASE}/clips/?status=qc_passed`),
-        // Also list 'ready' clips for review just in case, but target says qc_passed
         fetch(`${API_BASE}/clips/?status=published`)
       ]);
       const passedData = await passedRes.json();
@@ -178,6 +186,20 @@ function App() {
     }
   };
 
+  const fetchStories = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/curated-stories`);
+      if (res.ok) { const d = await res.json(); setStories(d || []); }
+    } catch (err) { console.error('Failed to fetch stories:', err); }
+  };
+
+  const fetchBgAssets = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/background-assets`);
+      if (res.ok) { const d = await res.json(); setBgAssets(d || []); }
+    } catch (err) { console.error('Failed to fetch background assets:', err); }
+  };
+
   // Trigger loads on tab change
   useEffect(() => {
     fetchChannels();
@@ -185,6 +207,10 @@ function App() {
       fetchSystemData();
     } else if (activeTab === 'candidates' || activeTab === 'assets') {
       fetchClips();
+    } else if (activeTab === 'stories') {
+      fetchStories();
+    } else if (activeTab === 'bgassets') {
+      fetchBgAssets();
     }
   }, [activeTab]);
 
@@ -377,6 +403,30 @@ function App() {
           style={{ justifyContent: 'flex-start', padding: '12px 16px', border: 'none' }}
         >
           <Video size={18} /> Asset Library
+        </button>
+
+        <button 
+          className={`btn ${activeTab === 'stories' ? 'btn-primary' : 'glass-panel'}`}
+          onClick={() => setActiveTab('stories')}
+          style={{ justifyContent: 'flex-start', padding: '12px 16px', border: 'none' }}
+        >
+          <BookOpen size={18} /> Curated Stories
+        </button>
+
+        <button 
+          className={`btn ${activeTab === 'bgassets' ? 'btn-primary' : 'glass-panel'}`}
+          onClick={() => setActiveTab('bgassets')}
+          style={{ justifyContent: 'flex-start', padding: '12px 16px', border: 'none' }}
+        >
+          <Film size={18} /> Background Assets
+        </button>
+
+        <button 
+          className={`btn ${activeTab === 'rights' ? 'btn-primary' : 'glass-panel'}`}
+          onClick={() => setActiveTab('rights')}
+          style={{ justifyContent: 'flex-start', padding: '12px 16px', border: 'none' }}
+        >
+          <Shield size={18} /> Rights &amp; Compliance
         </button>
       </div>
 
@@ -819,6 +869,225 @@ function App() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB 5: CURATED STORIES (spec §30, §31) */}
+        {activeTab === 'stories' && (
+          <div>
+            <h1 className="section-title"><BookOpen /> Curated Stories</h1>
+            <p className="text-muted" style={{ marginBottom: '24px' }}>
+              Submit Reddit stories or other human-written narratives for automated narration, captioning, and publishing.
+              Manual submission replaces automated discovery for this content type (spec §30.1).
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+              {/* Submit form */}
+              <div className="glass-panel">
+                <h3 style={{ marginTop: 0, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FileText size={18} /> Submit a Story
+                </h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!storySourceId) { showMessage('Select a curated_story content source first', 'danger'); return; }
+                  if (!newStory.title || !newStory.body_text) { showMessage('Title and body are required', 'danger'); return; }
+                  try {
+                    const res = await fetch(`${API_BASE}/curated-stories`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ content_source_id: storySourceId, ...newStory })
+                    });
+                    if (!res.ok) throw new Error((await res.json()).detail || 'Submission failed');
+                    showMessage('Story submitted! Pipeline started.', 'success');
+                    setNewStory({ title: '', body_text: '', source_url: '', author: '', subreddit: '' });
+                    fetchStories();
+                  } catch (err: any) { showMessage(err.message, 'danger'); }
+                }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Content Source (curated_story type)</label>
+                    <select value={storySourceId} onChange={e => setStorySourceId(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.07)', border: '1px solid var(--border-color)', color: 'inherit' }}>
+                      <option value="">Select source...</option>
+                      {sources.filter(s => s.type === 'curated_story').map(s => (
+                        <option key={s.id} value={s.id}>{s.external_ref || s.id.substring(0,8)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <input className="input" placeholder="Story title" value={newStory.title} onChange={e => setNewStory({...newStory, title: e.target.value})} required />
+                  <textarea className="input" placeholder="Full story body text" rows={6} value={newStory.body_text} onChange={e => setNewStory({...newStory, body_text: e.target.value})} required style={{ resize: 'vertical' }} />
+                  <input className="input" placeholder="Source URL (optional)" value={newStory.source_url} onChange={e => setNewStory({...newStory, source_url: e.target.value})} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <input className="input" placeholder="Author (optional)" value={newStory.author} onChange={e => setNewStory({...newStory, author: e.target.value})} />
+                    <input className="input" placeholder="Subreddit (optional)" value={newStory.subreddit} onChange={e => setNewStory({...newStory, subreddit: e.target.value})} />
+                  </div>
+                  <button type="submit" className="btn btn-primary">Submit Story →</button>
+                </form>
+              </div>
+
+              {/* Recent submissions */}
+              <div className="glass-panel">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ margin: 0 }}>Recent Submissions</h3>
+                  <button className="btn" style={{ padding: '6px 12px' }} onClick={fetchStories}><RefreshCw size={14} /></button>
+                </div>
+                {stories.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>No stories submitted yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '450px', overflowY: 'auto' }}>
+                    {stories.map((s: any) => (
+                      <div key={s.id} style={{ padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '4px', fontSize: '0.9rem' }}>{s.title}</div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <span className={`badge ${s.status === 'done' ? 'badge-completed' : s.status === 'failed' ? 'badge-pending' : 'badge-active'}`}>{s.status}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{s.submitted_at?.substring(0, 10)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: BACKGROUND ASSETS (spec §30.4, §31) */}
+        {activeTab === 'bgassets' && (
+          <div>
+            <h1 className="section-title"><Film /> Background Assets</h1>
+            <p className="text-muted" style={{ marginBottom: '24px' }}>
+              Pre-vetted background footage library. The pipeline only draws from this pool — never searches at render time.
+              All footage must have a confirmed license before it can be used in curated story clips.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+              {/* Add asset form */}
+              <div className="glass-panel">
+                <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Register New Asset</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newAsset.storage_key) { showMessage('Storage key is required', 'danger'); return; }
+                  try {
+                    const res = await fetch(`${API_BASE}/background-assets`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ ...newAsset, tags: newAsset.tags.split(',').map(t => t.trim()).filter(Boolean) })
+                    });
+                    if (!res.ok) throw new Error('Failed to register asset');
+                    showMessage('Asset registered!', 'success');
+                    setNewAsset({ storage_key: '', source_url: '', license_type: 'owned', license_evidence_ref: '', tags: '' });
+                    fetchBgAssets();
+                  } catch (err: any) { showMessage(err.message, 'danger'); }
+                }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <input className="input" placeholder="MinIO storage key (e.g. background/parkour/clip1.mp4)" value={newAsset.storage_key} onChange={e => setNewAsset({...newAsset, storage_key: e.target.value})} required />
+                  <input className="input" placeholder="Source URL (optional)" value={newAsset.source_url} onChange={e => setNewAsset({...newAsset, source_url: e.target.value})} />
+                  <select value={newAsset.license_type} onChange={e => setNewAsset({...newAsset, license_type: e.target.value})} style={{ padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.07)', border: '1px solid var(--border-color)', color: 'inherit' }}>
+                    <option value="owned">Owned (self-recorded)</option>
+                    <option value="licensed">Licensed (CC or explicit permission)</option>
+                    <option value="unknown">Unknown (do not use until cleared)</option>
+                  </select>
+                  <input className="input" placeholder="License evidence URL or document ref" value={newAsset.license_evidence_ref} onChange={e => setNewAsset({...newAsset, license_evidence_ref: e.target.value})} />
+                  <input className="input" placeholder="Tags (comma-separated): parkour, night, urban" value={newAsset.tags} onChange={e => setNewAsset({...newAsset, tags: e.target.value})} />
+                  <button type="submit" className="btn btn-primary">Register Asset</button>
+                </form>
+              </div>
+
+              {/* Asset list */}
+              <div className="glass-panel">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ margin: 0 }}>Active Library ({bgAssets.length})</h3>
+                  <button className="btn" style={{ padding: '6px 12px' }} onClick={fetchBgAssets}><RefreshCw size={14} /></button>
+                </div>
+                {bgAssets.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>No assets in library yet. Add footage above.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '450px', overflowY: 'auto' }}>
+                    {bgAssets.map((a: any) => (
+                      <div key={a.id} style={{ padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', fontSize: '0.85rem', marginBottom: '4px' }}>{a.storage_key.split('/').pop()}</div>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <span className={`badge ${a.license_type === 'owned' ? 'badge-completed' : a.license_type === 'licensed' ? 'badge-active' : 'badge-pending'}`}>{a.license_type}</span>
+                            {(a.tags || []).map((t: string) => <span key={t} style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)' }}>{t}</span>)}
+                          </div>
+                        </div>
+                        <button className="btn" style={{ padding: '6px 10px', fontSize: '0.75rem', background: 'rgba(255,50,50,0.15)' }} onClick={async () => {
+                          await fetch(`${API_BASE}/background-assets/${a.id}`, { method: 'DELETE' });
+                          showMessage('Asset retired', 'info');
+                          fetchBgAssets();
+                        }}>Retire</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: RIGHTS & COMPLIANCE (spec §11.4, §31) */}
+        {activeTab === 'rights' && (
+          <div>
+            <h1 className="section-title"><Shield /> Rights &amp; Compliance</h1>
+            <p className="text-muted" style={{ marginBottom: '24px' }}>
+              Every content source must have an explicit rights status before its clips can be published.
+              <strong style={{ color: 'var(--accent-primary)' }}> Anything other than owned / licensed / permission_granted blocks publishing automatically.</strong>
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+              <div className="glass-panel">
+                <h3 style={{ marginTop: 0, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><Shield size={18} /> Update Rights Record</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Channel</label>
+                    <select value={selectedChannelId} onChange={e => { setSelectedChannelId(e.target.value); fetchSources(e.target.value); }} style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.07)', border: '1px solid var(--border-color)', color: 'inherit' }}>
+                      <option value="">Select channel...</option>
+                      {channels.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Content Source</label>
+                    <select value={selectedSourceId} onChange={e => { setSelectedSourceId(e.target.value); fetchRightsStatus(e.target.value); }} style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.07)', border: '1px solid var(--border-color)', color: 'inherit' }}>
+                      <option value="">Select source...</option>
+                      {sources.map(s => <option key={s.id} value={s.id}>{s.type}: {s.external_ref}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Rights Status</label>
+                    <select value={rightsStatus} onChange={e => setRightsStatus(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.07)', border: '1px solid var(--border-color)', color: 'inherit' }}>
+                      <option value="unknown">⚠️ unknown — blocks publishing</option>
+                      <option value="owned">✅ owned</option>
+                      <option value="licensed">✅ licensed</option>
+                      <option value="permission_granted">✅ permission_granted</option>
+                      <option value="denied">🚫 denied — blocks publishing</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Evidence Reference (URL or document)</label>
+                    <input className="input" placeholder="https://... or description of permission" value={evidenceRef} onChange={e => setEvidenceRef(e.target.value)} />
+                  </div>
+                  <button className="btn btn-primary" onClick={handleSaveRights}>Save Rights Record</button>
+                </div>
+              </div>
+
+              {/* Sources rights overview */}
+              <div className="glass-panel">
+                <h3 style={{ marginTop: 0, marginBottom: '20px' }}>All Sources — Rights Status</h3>
+                {sources.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Select a channel to see its content sources.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {sources.map(s => (
+                      <div key={s.id} style={{ padding: '14px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{s.external_ref}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{s.type}</div>
+                        </div>
+                        <button className="btn" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => { setSelectedSourceId(s.id); fetchRightsStatus(s.id); }}>Review</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -7,6 +7,11 @@ from autonomous_media.db.models import Job, ClipCandidate, SourceVideo, Clip
 from autonomous_media.storage import get_object_data, put_object_data
 from autonomous_media.logging import get_logger, emit_event
 from autonomous_media.exceptions import StageUnrecoverableError
+from pathlib import Path
+import tempfile
+from autonomous_media.workers.captions import (
+    CaptionStyle, render_captions, words_from_raw_transcript
+)
 
 logger = get_logger("workers.editing")
 
@@ -51,28 +56,7 @@ class EditingWorker(Worker):
         except Exception as e:
             raise StageUnrecoverableError(f"Failed to fetch or parse transcript JSON: {e}")
 
-        # 2. Filter words and build SRT
-        srt_content = self._generate_srt(words, clip_candidate.start_ms, clip_candidate.end_ms)
-        if not srt_content:
-            raise StageUnrecoverableError("No words found in the clip window timeline")
-
-        # 3. Upload SRT to MinIO under srt/{clip_candidate_id}.srt
-        srt_storage_key = f"srt/{clip_candidate_id}.srt"
-        try:
-            put_object_data(
-                "autonomous-media-raw",
-                srt_storage_key,
-                srt_content.encode("utf-8"),
-                content_type="text/plain"
-            )
-        except Exception as e:
-            raise StageUnrecoverableError(f"Failed to upload SRT to MinIO: {e}")
-
-        # 4. Create Clip row
-        clip_id = uuid.uuid4()
-        duration_s = int((clip_candidate.end_ms - clip_candidate.start_ms) / 1000.0)
-        
-        # Determine caption style from channel (fallback to 'default')
+        # 1.5 Determine caption style from channel (fallback to 'default')
         caption_style = 'default'
         from autonomous_media.db.models import Channel
         content_source = session.query(SourceVideo.content_source_id).filter(SourceVideo.id == source_video.id).first()
@@ -83,6 +67,31 @@ class EditingWorker(Worker):
                 channel = session.query(Channel).filter(Channel.id == channel_id_row[0]).first()
                 if channel:
                     caption_style = channel.caption_style
+
+        # 2. Build word timestamps for the clip window
+        word_ts = words_from_raw_transcript(words, clip_candidate.start_ms, clip_candidate.end_ms)
+        if not word_ts:
+            raise StageUnrecoverableError("No words found in the clip window timeline")
+
+        # 3. Generate .ass subtitle file and upload to MinIO
+        #    Rendering worker will apply it during the FFmpeg encode pass.
+        ass_storage_key = f"srt/{clip_candidate_id}.ass"
+        style = CaptionStyle.from_channel_config(caption_style)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                ass_path = render_captions(word_ts, style, Path(tmp) / "captions.ass")
+                put_object_data(
+                    "autonomous-media-raw",
+                    ass_storage_key,
+                    ass_path.read_bytes(),
+                    content_type="text/plain"
+                )
+        except Exception as e:
+            raise StageUnrecoverableError(f"Failed to generate or upload .ass captions: {e}")
+
+        # 4. Create Clip row
+        clip_id = uuid.uuid4()
+        duration_s = int((clip_candidate.end_ms - clip_candidate.start_ms) / 1000.0)
 
         # We set storage_key to the final video path
         final_video_key = f"clips/{clip_id}.mp4"
@@ -99,6 +108,10 @@ class EditingWorker(Worker):
             created_at=datetime.now(timezone.utc)
         )
         session.add(clip)
+        
+        # Store the ASS file key in the job payload so rendering.py can fetch it
+        next_job_payload = {"clip_id": str(clip_id), "ass_storage_key": ass_storage_key}
+        
         session.flush()
 
         logger.info(
@@ -109,7 +122,7 @@ class EditingWorker(Worker):
         # 5. Enqueue rendering job
         next_job = Job(
             type="rendering",
-            payload={"clip_id": str(clip_id)},
+            payload=next_job_payload,
             trace_id=job.trace_id,
             channel_id=job.channel_id,
             priority=job.priority,
@@ -120,46 +133,3 @@ class EditingWorker(Worker):
         session.commit()
 
         return JobResult()
-
-    def _format_ms_to_srt_time(self, ms: int) -> str:
-        sec, msec = divmod(ms, 1000)
-        min_val, sec = divmod(sec, 60)
-        hr, min_val = divmod(min_val, 60)
-        return f"{hr:02d}:{min_val:02d}:{sec:02d},{msec:03d}"
-
-    def _generate_srt(self, words: list[dict], start_ms: int, end_ms: int) -> str:
-        clip_words = [w for w in words if w["start_ms"] >= start_ms and w["end_ms"] <= end_ms]
-        if not clip_words:
-            return ""
-            
-        srt_blocks = []
-        current_block_words = []
-        block_index = 1
-        
-        for w in clip_words:
-            current_block_words.append(w)
-            text_len = sum(len(x["word"]) for x in current_block_words) + len(current_block_words) - 1
-            if len(current_block_words) >= 3 or text_len >= 20:
-                rel_start = max(0, current_block_words[0]["start_ms"] - start_ms)
-                rel_end = max(rel_start + 100, current_block_words[-1]["end_ms"] - start_ms)
-                
-                line_text = " ".join(x["word"] for x in current_block_words)
-                srt_blocks.append(
-                    f"{block_index}\n"
-                    f"{self._format_ms_to_srt_time(rel_start)} --> {self._format_ms_to_srt_time(rel_end)}\n"
-                    f"{line_text}\n"
-                )
-                block_index += 1
-                current_block_words = []
-                
-        if current_block_words:
-            rel_start = max(0, current_block_words[0]["start_ms"] - start_ms)
-            rel_end = max(rel_start + 100, current_block_words[-1]["end_ms"] - start_ms)
-            line_text = " ".join(x["word"] for x in current_block_words)
-            srt_blocks.append(
-                f"{block_index}\n"
-                f"{self._format_ms_to_srt_time(rel_start)} --> {self._format_ms_to_srt_time(rel_end)}\n"
-                f"{line_text}\n"
-            )
-            
-        return "\n".join(srt_blocks)

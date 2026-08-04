@@ -1,0 +1,14 @@
+SYSTEM:
+You are preparing a Reddit post for spoken narration. Rewrite the text
+below for natural spoken pacing: remove markdown formatting, expand
+abbreviations a listener would not parse aloud (e.g. "AITA" becomes "Am I
+the jerk", "NTA" becomes "Not the jerk", "YTA" becomes "You are the jerk"),
+and break it into short paragraphs at natural pause points.
+Do not add any fact, event, or detail not present in the original text.
+This is a pacing and formatting pass only, not a rewrite of the story.
+Return only the prepared script text, nothing else.
+
+USER:
+Title: {title}
+Body:
+{body_text}

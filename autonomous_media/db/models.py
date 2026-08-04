@@ -20,6 +20,7 @@ class Channel(Base):
     target_duration_max_s: Mapped[int] = mapped_column(Integer)
     caption_style: Mapped[str] = mapped_column(String)
     music_profile: Mapped[str] = mapped_column(String)
+    voice_profile: Mapped[str | None] = mapped_column(String, nullable=True)  # Piper voice identifier for curated_story channels (spec §30.5)
     branding: Mapped[dict] = mapped_column(JSON, default=dict)
     upload_cadence: Mapped[dict] = mapped_column(JSON, default=dict)
     allowed_content_types: Mapped[list] = mapped_column(JSON, default=list)
@@ -53,11 +54,44 @@ class SourceVideo(Base):
     checksum_sha256: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class SourcePost(Base):
+    """Spec §30.6: operator-submitted story (Reddit or similar). Manual acquisition
+    replaces discover() for the curated_story content type (spec §30.1)."""
+    __tablename__ = "source_posts"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    content_source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("content_sources.id"))
+    title: Mapped[str] = mapped_column(String)
+    body_text: Mapped[str] = mapped_column(Text)
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    author: Mapped[str | None] = mapped_column(String, nullable=True)
+    subreddit: Mapped[str | None] = mapped_column(String, nullable=True)
+    narration_audio_key: Mapped[str | None] = mapped_column(String, nullable=True)  # MinIO key for generated WAV
+    status: Mapped[str] = mapped_column(String, default="pending")  # pending | scripting | narrating | transcribing | rendering | done | failed
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class BackgroundAsset(Base):
+    """Spec §30.4: pre-vetted background footage library for curated_story clips.
+    The pipeline only ever draws from this library, never searches at render time."""
+    __tablename__ = "background_assets"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    storage_key: Mapped[str] = mapped_column(String)  # MinIO key
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    license_type: Mapped[str] = mapped_column(String, default="unknown")  # owned | licensed | unknown
+    license_evidence_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tags: Mapped[list] = mapped_column(JSON, default=list)  # e.g. ["parkour", "night", "urban"]
+    status: Mapped[str] = mapped_column(String, default="active")  # active | retired
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Transcript(Base):
     """Only metadata lives here. Full timestamped transcript JSON lives in MinIO at storage_key (spec §8.3)."""
     __tablename__ = "transcripts"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    source_video_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_videos.id"))
+    source_video_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("source_videos.id"), nullable=True)
+    source_post_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("source_posts.id"), nullable=True)
+    promo_segments: Mapped[list | None] = mapped_column(JSON, nullable=True)  # cached output of promo_filter.detect_promo_segments (spec §11.8)
     engine: Mapped[str] = mapped_column(String, default="whisper-large-v3-turbo")  # ASR model used
     language: Mapped[str] = mapped_column(String, default="en")
     storage_key: Mapped[str | None] = mapped_column(String, nullable=True)  # MinIO pointer to full JSON
@@ -89,7 +123,9 @@ class ClipCandidate(Base):
 class Clip(Base):
     __tablename__ = "clips"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    clip_candidate_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clip_candidates.id"))
+    clip_candidate_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("clip_candidates.id"), nullable=True)
+    source_post_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("source_posts.id"), nullable=True)
+    background_asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("background_assets.id"), nullable=True)
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"))  # spec §8.3
     storage_key: Mapped[str] = mapped_column(String)
     thumbnail_key: Mapped[str | None] = mapped_column(String, nullable=True)  # spec §8.3
@@ -203,3 +239,17 @@ class SystemEvent(Base):
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     trace_id: Mapped[str] = mapped_column(String, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class User(Base):
+    """Spec §8.3, §29.2: backs the JWT auth in Section 14.3.
+    role is a closed two-value enum: operator | local_admin.
+    """
+    __tablename__ = "users"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, default="operator")  # operator | local_admin
+    channel_scope: Mapped[list | None] = mapped_column(JSON, nullable=True)  # list of channel_ids, null = all channels
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

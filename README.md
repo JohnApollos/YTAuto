@@ -1,8 +1,8 @@
 # Autonomous Media
 
-An autonomous AI content production system. It continuously monitors source YouTube channels, downloads and transcribes long-form podcasts/interviews, scores and selects the best 30–90 second windows using a local LLM, renders them into vertical YouTube Shorts with animated captions and branding, and publishes them on a configurable schedule — while requiring minimal ongoing human intervention.
+An autonomous AI content production system. It continuously monitors source YouTube channels, downloads and transcribes long-form podcasts/interviews, scores and selects the best 30–90 second windows using a local LLM, renders them into vertical YouTube Shorts with animated `.ass` captions and branding, and publishes them on a configurable schedule — while requiring minimal ongoing human intervention.
 
-**V1 scope:** three YouTube channels · YouTube Shorts only · podcast/interview clipping · English · sequential processing on a single consumer PC (Windows 11, AMD Ryzen 5 5500, 16 GB RAM, RX 580 8 GB VRAM).
+**v1.5 scope:** podcast/interview clipping + operator-submitted curated stories (Reddit narration) · promotional-segment filtering · word-level `.ass` captions (Montserrat ExtraBold) · background asset library · full 7-page operator dashboard · single consumer PC (Windows 11, AMD Ryzen 5 5500, 16 GB RAM, RX 580 8 GB VRAM).
 
 ---
 
@@ -14,7 +14,7 @@ An autonomous AI content production system. It continuously monitors source YouT
 | Spec v1.2 Compliance Audit (16 schema/code gaps closed) | ✅ Complete — commit `5d21b02` |
 | Phase 1 — Podcast Clipping MVP (all 10 pipeline workers implemented) | ✅ Complete — commit `391bfe1` |
 | Phase 2 — AI Model Integration, Quota System, E2E Tests | ✅ Complete — commit `391bfe1` |
-| V2 — AI Story Generation | Deferred |
+| **Spec v1.5 Upgrade** — promo filter · ASS captions · curated stories · background assets · 7-page dashboard | ✅ **Complete** — see [CHANGELOG](CHANGELOG.md) |
 
 ---
 
@@ -29,7 +29,15 @@ Install on the **host machine** (not in Docker):
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — `pip install yt-dlp`
 - A **Vulkan-compiled `llama-server`** binary (see [Deployment Guide](../docs/deployment_guide.md) or the full instructions in the [GitHub repo](https://github.com/JohnApollos/YTAuto))
 
-### Setup
+### One-Click Start (recommended)
+
+Double-click **`Start-Autonomous-Media.bat`** in the project root. It:
+1. Starts Docker Desktop if not already running
+2. Brings up Postgres, Redis, and MinIO via `docker compose`
+3. Launches the Vulkan `llama-server` in a minimised window
+4. Polls the health endpoint and opens the dashboard at `http://localhost:3000`
+
+### Manual Setup
 
 ```powershell
 # 1. Clone
@@ -46,13 +54,13 @@ copy .env.example .env
 # Edit .env with your credentials (DATABASE_URL, YOUTUBE_OAUTH_*, JWT_SECRET, etc.)
 
 # 4. Start stateful services (Postgres+pgvector, Redis, MinIO)
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
-# 5. Apply all database migrations
+# 5. Apply all database migrations (includes v1.5 schema)
 alembic upgrade head
 
 # 6. Verify the API is up
-uvicorn autonomous_media.api.main:app --reload
+uvicorn autonomous_media.main:app --reload
 # → curl http://localhost:8000/api/v1/system/health  should return {"status": "ok"}
 ```
 
