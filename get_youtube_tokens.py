@@ -24,7 +24,7 @@ def main():
             "client_secret": client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": ["http://localhost:8080/"]
+            "redirect_uris": ["http://localhost:8090/"]
         }
     }
 
@@ -36,7 +36,7 @@ def main():
         flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
         # Using a fixed port to match our redirect URI
         credentials = flow.run_local_server(
-            port=8080,
+            port=8090,
             prompt="consent",
             authorization_prompt_message=""
         )
@@ -55,7 +55,7 @@ def main():
         print(f"\nError running OAuth flow: {e}")
         print("Please ensure your Google Cloud Console project is configured with:")
         print("  - Desktop app type credentials")
-        print("  - Authorized redirect URIs: http://localhost:8080/")
+        print("  - Authorized redirect URIs: http://localhost:8090/")
 
 if __name__ == "__main__":
     main()
