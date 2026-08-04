@@ -15,3 +15,8 @@ def login(request: LoginRequest):
 @router.post("/refresh")
 def refresh_token():
     return {"access_token": "new_dummy_token", "token_type": "bearer"}
+
+def require_auth():
+    """Stub authentication dependency for FastAPI routes."""
+    return {"username": "operator", "role": "operator"}
+
