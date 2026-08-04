@@ -41,9 +41,9 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 2: Bring up the stateful services
 :: ---------------------------------------------------------------
-echo [2/4] Starting services...
+echo [2/5] Starting services (Postgres, Redis, MinIO)...
 cd /d "%~dp0"
-docker compose -f docker\docker-compose.yml up -d
+docker compose up -d
 if errorlevel 1 (
     echo       Something went wrong bringing up services - see the message above.
     pause
@@ -55,13 +55,13 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 3: Native model runtime
 :: ---------------------------------------------------------------
-echo [3/4] Checking the AI model runtime...
+echo [3/5] Checking the AI model runtime...
 tasklist /FI "IMAGENAME eq llama-server.exe" 2>NUL | find /I /N "llama-server.exe">NUL
 if "%ERRORLEVEL%"=="1" (
     echo       Starting it now...
-    start "Autonomous Media - Model Runtime" /MIN "runtime\llama-server.exe" ^
-        --model "models\qwen3-8b-instruct-q4_k_m.gguf" ^
-        --port 8080
+    start "Autonomous Media - Model Runtime" /MIN llama-server.exe ^
+        --model "%~dp0models\qwen3-8b-Q4_K_M.gguf" ^
+        --port 8080 --gpu-layers 99
 ) else (
     echo       Already running.
 )
@@ -70,7 +70,16 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 4: Wait for health
 :: ---------------------------------------------------------------
-echo [4/4] Waiting for the system to finish starting...
+echo [4/5] Starting API server + Scheduler...
+tasklist /FI "WINDOWTITLE eq Autonomous Media - Scheduler" 2>NUL | find /I /N "python.exe">NUL
+if "%ERRORLEVEL%"=="1" (
+    start "Autonomous Media - Scheduler" /MIN cmd /k "cd /d %~dp0 && .venv\Scripts\activate && python -m autonomous_media.main"
+    start "Autonomous Media - API" /MIN cmd /k "cd /d %~dp0 && .venv\Scripts\activate && uvicorn autonomous_media.api.main:app --host 0.0.0.0 --port 8000"
+) else (
+    echo       Already running.
+)
+echo.
+echo [5/5] Waiting for the system to be ready...
 set /a HEALTH_WAIT=0
 :WAIT_HEALTH
 timeout /t 3 /nobreak >NUL

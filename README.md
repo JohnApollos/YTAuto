@@ -54,14 +54,19 @@ copy .env.example .env
 # Edit .env with your credentials (DATABASE_URL, YOUTUBE_OAUTH_*, JWT_SECRET, etc.)
 
 # 4. Start stateful services (Postgres+pgvector, Redis, MinIO)
-docker compose -f docker/docker-compose.yml up -d
+docker compose up -d
 
 # 5. Apply all database migrations (includes v1.5 schema)
 alembic upgrade head
 
-# 6. Verify the API is up
-uvicorn autonomous_media.main:app --reload
-# → curl http://localhost:8000/api/v1/system/health  should return {"status": "ok"}
+# 6. Start the AI model server (leave this window open)
+llama-server.exe --model C:\dev\YTAuto\models\qwen3-8b-Q4_K_M.gguf --port 8080 --gpu-layers 99
+
+# 7. In a NEW terminal — start the REST API
+uvicorn autonomous_media.api.main:app --host 0.0.0.0 --port 8000
+
+# 8. In ANOTHER terminal — start the background scheduler
+python -m autonomous_media.main
 ```
 
 ### Starting the Model Server
