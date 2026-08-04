@@ -17,25 +17,44 @@ class TranscriptionWorker(Worker):
 
     def process(self, session: Session, job: Job) -> JobResult:
         from faster_whisper import WhisperModel
+        from autonomous_media.db.models import SourcePost
+
         source_video_id = job.payload.get("source_video_id")
-        if not source_video_id:
-            raise StageUnrecoverableError("Missing source_video_id in job payload")
+        source_post_id = job.payload.get("source_post_id")
 
-        source_video = session.query(SourceVideo).filter(SourceVideo.id == source_video_id).first()
-        if not source_video:
-            raise StageUnrecoverableError(f"SourceVideo {source_video_id} not found")
+        if not source_video_id and not source_post_id:
+            raise StageUnrecoverableError("Missing both source_video_id and source_post_id in job payload")
 
-        logger.info(
-            f"Starting transcription for source_video {source_video_id}",
-            extra={"trace_id": job.trace_id}
-        )
+        source_video = None
+        source_post = None
+        audio_storage_key = ""
+
+        if source_video_id:
+            sv_uuid = uuid.UUID(source_video_id) if isinstance(source_video_id, str) else source_video_id
+            source_video = session.query(SourceVideo).filter(SourceVideo.id == sv_uuid).first()
+            if not source_video:
+                raise StageUnrecoverableError(f"SourceVideo {source_video_id} not found")
+            audio_storage_key = f"raw/{source_video.id}/audio.wav"
+            logger.info(
+                f"Starting transcription for source_video {source_video.id}",
+                extra={"trace_id": job.trace_id}
+            )
+        else:
+            sp_uuid = uuid.UUID(source_post_id) if isinstance(source_post_id, str) else source_post_id
+            source_post = session.query(SourcePost).filter(SourcePost.id == sp_uuid).first()
+            if not source_post:
+                raise StageUnrecoverableError(f"SourcePost {source_post_id} not found")
+            audio_storage_key = f"raw/story-{source_post.id}/audio.wav"
+            logger.info(
+                f"Starting transcription for source_post {source_post.id}",
+                extra={"trace_id": job.trace_id}
+            )
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            audio_filename = f"{source_video_id}_audio.wav"
+            audio_filename = "audio.wav"
             audio_path = os.path.join(temp_dir, audio_filename)
 
             # 1. Fetch audio.wav from MinIO
-            audio_storage_key = f"raw/{source_video_id}/audio.wav"
             try:
                 download_file("autonomous-media-raw", audio_storage_key, audio_path)
             except Exception as e:
@@ -56,12 +75,6 @@ class TranscriptionWorker(Worker):
                         f"Audio probe results: sample_rate={sample_rate}Hz, channels={channels}",
                         extra={"trace_id": job.trace_id}
                     )
-                    if sample_rate != 16000 or channels != 1:
-                        logger.warning(
-                            f"Audio format contract mismatch: expected 16kHz mono (sample_rate=16000, channels=1), "
-                            f"got {sample_rate}Hz with {channels} channels.",
-                            extra={"trace_id": job.trace_id}
-                        )
                 else:
                     logger.warning("ffmpeg probe failed to find audio stream", extra={"trace_id": job.trace_id})
             except Exception as e:
@@ -111,7 +124,8 @@ class TranscriptionWorker(Worker):
             # 5. Create Transcript row
             transcript = Transcript(
                 id=transcript_id,
-                source_video_id=source_video_id,
+                source_video_id=source_video.id if source_video else None,
+                source_post_id=source_post.id if source_post else None,
                 engine="whisper-large-v3-turbo",
                 language=info.language,
                 storage_key=transcript_storage_key,
@@ -121,8 +135,10 @@ class TranscriptionWorker(Worker):
             session.add(transcript)
             session.flush()
 
-            # Mark SourceVideo as transcribed
-            source_video.status = "transcribed"
+            if source_video:
+                source_video.status = "transcribed"
+            else:
+                source_post.status = "transcribed"
             session.commit()
 
             # 6. Emit TRANSCRIPT_READY event
@@ -131,26 +147,40 @@ class TranscriptionWorker(Worker):
                 trace_id=job.trace_id,
                 payload={
                     "transcript_id": str(transcript_id),
-                    "source_video_id": str(source_video_id),
+                    "source_video_id": str(source_video.id) if source_video else None,
+                    "source_post_id": str(source_post.id) if source_post else None,
                     "word_count": word_count
                 }
             )
 
-            # 7. Enqueue intelligence job
-            next_job = Job(
-                type="intelligence",
-                payload={"transcript_id": str(transcript_id)},
-                trace_id=job.trace_id,
-                channel_id=job.channel_id,
-                priority=job.priority,
-                attempts=0,
-                max_attempts=3
-            )
+            # 7. Enqueue next job
+            if source_video:
+                # Podcast clips go to intelligence for candidate extraction
+                next_job = Job(
+                    type="intelligence",
+                    payload={"transcript_id": str(transcript_id)},
+                    trace_id=job.trace_id,
+                    channel_id=job.channel_id,
+                    priority=job.priority,
+                    attempts=0,
+                    max_attempts=3
+                )
+            else:
+                # Curated stories bypass intelligence and go directly to editing
+                next_job = Job(
+                    type="editing",
+                    payload={"source_post_id": str(source_post.id)},
+                    trace_id=job.trace_id,
+                    channel_id=job.channel_id,
+                    priority=job.priority,
+                    attempts=0,
+                    max_attempts=3
+                )
             session.add(next_job)
             session.commit()
 
             logger.info(
-                f"Successfully completed transcription for video {source_video_id}, word count: {word_count}",
+                f"Successfully completed transcription for { 'video ' + str(source_video.id) if source_video else 'post ' + str(source_post.id) }, word count: {word_count}",
                 extra={"trace_id": job.trace_id}
             )
 

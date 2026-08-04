@@ -1,10 +1,11 @@
 import os
+import uuid
 import tempfile
 import subprocess
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from autonomous_media.workers.base import Worker, JobResult
-from autonomous_media.db.models import Job, Clip, ClipCandidate, SourceVideo
+from autonomous_media.db.models import Job, Clip, ClipCandidate, SourceVideo, BackgroundAsset, ContentSource
 from autonomous_media.storage import download_file, upload_file
 from autonomous_media.logging import get_logger, emit_event
 from autonomous_media.exceptions import StageUnrecoverableError
@@ -12,65 +13,156 @@ from pathlib import Path
 
 logger = get_logger("workers.rendering")
 
+def download_youtube_background(url: str, temp_dir: str) -> str:
+    """Download a YouTube background video using yt-dlp."""
+    import yt_dlp
+    output_tmpl = os.path.join(temp_dir, "downloaded_bg.%(ext)s")
+    
+    # We restrict to mp4 video around 720p/1080p to keep it fast
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4][height<=1080]/best[ext=mp4]/best',
+        'outtmpl': output_tmpl,
+        'quiet': True,
+        'no_warnings': True,
+    }
+    
+    logger.info(f"Downloading background video from URL: {url}")
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
+        return filename
+
 class RenderingWorker(Worker):
     job_type = 'rendering'
 
     def process(self, session: Session, job: Job) -> JobResult:
         clip_id = job.payload.get("clip_id")
         ass_storage_key = job.payload.get("ass_storage_key")
+        source_post_id = job.payload.get("source_post_id")
+
         if not clip_id:
             raise StageUnrecoverableError("Missing clip_id in job payload")
 
-        clip = session.query(Clip).filter(Clip.id == clip_id).first()
+        clip = session.query(Clip).filter(Clip.id == uuid.UUID(clip_id) if isinstance(clip_id, str) else clip_id).first()
         if not clip:
             raise StageUnrecoverableError(f"Clip {clip_id} not found")
 
-        clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == clip.clip_candidate_id).first()
-        if not clip_candidate:
-            raise StageUnrecoverableError(f"ClipCandidate {clip.clip_candidate_id} not found")
-
-        source_video = session.query(SourceVideo).filter(SourceVideo.id == clip_candidate.source_video_id).first()
-        if not source_video:
-            raise StageUnrecoverableError(f"SourceVideo {clip_candidate.source_video_id} not found")
-
         logger.info(
-            f"Starting rendering for Clip {clip_id} (candidate {clip_candidate.id})",
+            f"Starting rendering for Clip {clip_id}",
             extra={"trace_id": job.trace_id}
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             video_filename = "original.mp4"
-            srt_filename = "captions.srt"
             ass_filename = "captions.ass"
             output_filename = "output.mp4"
+            audio_filename = "narration.wav"
 
             video_path = os.path.join(temp_dir, video_filename)
-            srt_path = os.path.join(temp_dir, srt_filename)
             ass_path = os.path.join(temp_dir, ass_filename)
             output_path = os.path.join(temp_dir, output_filename)
+            audio_path = os.path.join(temp_dir, audio_filename)
 
-            # 1. Fetch raw original video and srt from MinIO
-            try:
-                download_file("autonomous-media-raw", source_video.storage_key, video_path)
-            except Exception as e:
-                raise StageUnrecoverableError(f"Failed to download video from MinIO: {e}")
+            is_story = source_post_id is not None
+            bg_asset_used = None
 
+            if not is_story:
+                # Podcast clipping workflow
+                clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == clip.clip_candidate_id).first()
+                if not clip_candidate:
+                    raise StageUnrecoverableError(f"ClipCandidate {clip.clip_candidate_id} not found")
+
+                source_video = session.query(SourceVideo).filter(SourceVideo.id == clip_candidate.source_video_id).first()
+                if not source_video:
+                    raise StageUnrecoverableError(f"SourceVideo {clip_candidate.source_video_id} not found")
+
+                # Fetch raw original video from MinIO
+                try:
+                    download_file("autonomous-media-raw", source_video.storage_key, video_path)
+                except Exception as e:
+                    raise StageUnrecoverableError(f"Failed to download video from MinIO: {e}")
+            else:
+                # Reddit stories workflow: Resolve background asset
+                content_source = session.query(ContentSource).filter(ContentSource.id == clip.source_post_id).first()
+                # Try finding in content source config
+                bg_urls = []
+                if content_source and content_source.config:
+                    bg_urls = content_source.config.get("background_urls", [])
+
+                downloaded_path = None
+                for url in bg_urls:
+                    # Check if already downloaded/registered
+                    existing = session.query(BackgroundAsset).filter(BackgroundAsset.source_url == url).first()
+                    if existing:
+                        bg_asset_used = existing
+                        break
+                    
+                    # Try downloading it
+                    try:
+                        downloaded_path = download_youtube_background(url, temp_dir)
+                        if downloaded_path and os.path.exists(downloaded_path):
+                            # Save to MinIO & register in DB
+                            asset_id = uuid.uuid4()
+                            storage_key = f"backgrounds/{asset_id}.mp4"
+                            upload_file("autonomous-media-raw", storage_key, downloaded_path)
+                            
+                            bg_asset_used = BackgroundAsset(
+                                id=asset_id,
+                                storage_key=storage_key,
+                                source_url=url,
+                                license_type="licensed",
+                                status="active",
+                                created_at=datetime.now(timezone.utc)
+                            )
+                            session.add(bg_asset_used)
+                            session.commit()
+                            break
+                    except Exception as e:
+                        logger.warning(f"Failed to download background YouTube URL {url}: {e}")
+
+                if not bg_asset_used:
+                    # Fallback to choosing a random BackgroundAsset from DB (using dialect-agnostic func.random())
+                    from sqlalchemy import func
+                    bg_asset_used = session.query(BackgroundAsset).filter(BackgroundAsset.status == "active").order_by(func.random()).first()
+
+                if not bg_asset_used:
+                    raise StageUnrecoverableError("No background assets found. Provide background YouTube URLs or register background footage first.")
+
+                clip.background_asset_id = bg_asset_used.id
+                session.commit()
+
+                # Download background video asset
+                try:
+                    download_file("autonomous-media-raw", bg_asset_used.storage_key, video_path)
+                except Exception as e:
+                    raise StageUnrecoverableError(f"Failed to download background asset: {e}")
+
+                # Download narration audio
+                try:
+                    download_file("autonomous-media-raw", f"raw/story-{source_post_id}/audio.wav", audio_path)
+                except Exception as e:
+                    raise StageUnrecoverableError(f"Failed to download narration audio: {e}")
+
+            # Download subtitles (.ass or fallback .srt)
+            use_ass = True
             if ass_storage_key:
                 try:
                     download_file("autonomous-media-raw", ass_storage_key, ass_path)
                 except Exception as e:
                     raise StageUnrecoverableError(f"Failed to download ASS from MinIO: {e}")
             else:
-                srt_storage_key = f"srt/{clip_candidate.id}.srt"
+                use_ass = False
+                clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == clip.clip_candidate_id).first()
+                srt_storage_key = f"srt/{clip_candidate.id}.srt" if clip_candidate else f"srt/{clip.id}.srt"
                 try:
-                    download_file("autonomous-media-raw", srt_storage_key, srt_path)
+                    download_file("autonomous-media-raw", srt_storage_key, srt_path := os.path.join(temp_dir, "captions.srt"))
                 except Exception as e:
                     raise StageUnrecoverableError(f"Failed to download SRT from MinIO: {e}")
 
-            if not os.path.exists(video_path) or (not os.path.exists(srt_path) and not os.path.exists(ass_path)):
+            if not os.path.exists(video_path) or (use_ass and not os.path.exists(ass_path)) or (not use_ass and not os.path.exists(srt_path)):
                 raise StageUnrecoverableError("Downloaded input files for rendering not found")
 
-            # 2. Get video dimensions to calculate crop default if needed
+            # Get video dimensions to calculate crop
             import ffmpeg
             try:
                 probe = ffmpeg.probe(video_path)
@@ -83,51 +175,62 @@ class RenderingWorker(Worker):
 
             aspect_ratio = width / height
 
-            # 3. Calculate crop region
-            crop_region = clip_candidate.scores.get("crop_region")
-            if crop_region:
-                crop_w_norm = crop_region["x_max"] - crop_region["x_min"]
-                crop_x_norm = crop_region["x_min"]
+            if not is_story:
+                clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == clip.clip_candidate_id).first()
+                crop_region = clip_candidate.scores.get("crop_region") if clip_candidate else None
+                if crop_region:
+                    crop_w_norm = crop_region["x_max"] - crop_region["x_min"]
+                    crop_x_norm = crop_region["x_min"]
+                else:
+                    crop_w_norm = (9.0 / 16.0) / aspect_ratio
+                    crop_x_norm = 0.5 - (crop_w_norm / 2.0)
+
+                start_sec = clip_candidate.start_ms / 1000.0 if clip_candidate else 0.0
+                end_sec = clip_candidate.end_ms / 1000.0 if clip_candidate else 10.0
+                
+                # Build FFmpeg graph
+                stream = ffmpeg.input(video_path, ss=start_sec, to=end_sec)
+                video = stream.video
+                audio = stream.audio
             else:
+                # Stories: Center crop satisfying background footage
                 crop_w_norm = (9.0 / 16.0) / aspect_ratio
                 crop_x_norm = 0.5 - (crop_w_norm / 2.0)
 
-            start_sec = clip_candidate.start_ms / 1000.0
-            end_sec = clip_candidate.end_ms / 1000.0
+                # Narration audio is the master timeline audio
+                stream_v = ffmpeg.input(video_path)
+                stream_a = ffmpeg.input(audio_path)
+                video = stream_v.video
+                audio = stream_a.audio
 
-            # Build the FFmpeg command using ffmpeg-python
-            stream = ffmpeg.input(video_filename, ss=start_sec, to=end_sec)
-            video = stream.video
-            audio = stream.audio
-
-            # Apply filters
+            # Apply crop and scale to 9:16 vertical
             video = video.filter('crop', f"in_w*{crop_w_norm}", "in_h", f"in_w*{crop_x_norm}", 0)
             video = video.filter('scale', 1080, 1920)
             
-            if ass_storage_key:
+            # Burn in subtitles
+            if use_ass:
                 escaped_ass_filename = ass_filename.replace('\\', '/').replace(':', '\\:')
                 video = video.filter('ass', escaped_ass_filename)
             else:
-                # Burn subtitles using relative filename (run in temp_dir to avoid drive letter colon escaping issues)
-                # Escaping filename for FFmpeg subtitles filter: replacing single backslashes and single quotes
-                escaped_srt_filename = srt_filename.replace('\\', '/').replace(':', '\\:')
+                escaped_srt_filename = "captions.srt".replace('\\', '/').replace(':', '\\:')
                 video = video.filter('subtitles', escaped_srt_filename, force_style='FontSize=24,PrimaryColour=&H00FFFFFF')
 
-            # 4. Compile and Run FFmpeg with hardware-encode fallback
-            # We compile the graph to get arguments, and then run it with custom cwd=temp_dir
-            logger.info("Compiling FFmpeg graph", extra={"trace_id": job.trace_id})
+            # Compile output command
+            # For stories, we specify shortest=1 to truncate background video to narration audio length
+            output_opts = {}
+            if is_story:
+                output_opts["shortest"] = 1
 
-            # Attempt 1: AMD AMF Hardware encode
             args_amf = (
                 ffmpeg
-                .output(video, audio, output_filename, vcodec='h264_amf', acodec='aac')
+                .output(video, audio, output_filename, vcodec='h264_amf', acodec='aac', **output_opts)
                 .overwrite_output()
                 .compile()
             )
             
             logger.info(f"Running AMF render command: {' '.join(args_amf)}", extra={"trace_id": job.trace_id})
             try:
-                res = subprocess.run(args_amf, cwd=temp_dir, check=True, capture_output=True)
+                subprocess.run(args_amf, cwd=temp_dir, check=True, capture_output=True)
                 logger.info("Successfully rendered video using h264_amf hardware encoder", extra={"trace_id": job.trace_id})
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 stderr_msg = e.stderr.decode('utf8') if hasattr(e, 'stderr') and e.stderr else str(e)
@@ -136,10 +239,10 @@ class RenderingWorker(Worker):
                     extra={"trace_id": job.trace_id}
                 )
 
-                # Attempt 2: CPU fallback
+                # CPU fallback
                 args_cpu = (
                     ffmpeg
-                    .output(video, audio, output_filename, vcodec='libx264', acodec='aac', pix_fmt='yuv420p')
+                    .output(video, audio, output_filename, vcodec='libx264', acodec='aac', pix_fmt='yuv420p', **output_opts)
                     .overwrite_output()
                     .compile()
                 )

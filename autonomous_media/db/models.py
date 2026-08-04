@@ -66,6 +66,7 @@ class SourcePost(Base):
     author: Mapped[str | None] = mapped_column(String, nullable=True)
     subreddit: Mapped[str | None] = mapped_column(String, nullable=True)
     narration_audio_key: Mapped[str | None] = mapped_column(String, nullable=True)  # MinIO key for generated WAV
+    script_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # LLM formatted narration script
     status: Mapped[str] = mapped_column(String, default="pending")  # pending | scripting | narrating | transcribing | rendering | done | failed
     submitted_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

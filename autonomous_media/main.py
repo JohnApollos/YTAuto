@@ -53,6 +53,8 @@ def start_scheduler():
     from autonomous_media.workers.publishing import PublishingWorker
     from autonomous_media.workers.analytics import AnalyticsWorker
     from autonomous_media.workers.learning import LearningWorker
+    from autonomous_media.workers.script_preparation import ScriptPreparationWorker
+    from autonomous_media.workers.narration_worker import NarrationWorker
 
     registry = {
         "acquisition":   AcquisitionWorker(SessionLocal),
@@ -65,6 +67,8 @@ def start_scheduler():
         "publishing":    PublishingWorker(SessionLocal),
         "analytics":     AnalyticsWorker(SessionLocal),
         "learning":      LearningWorker(SessionLocal),
+        "script_preparation": ScriptPreparationWorker(SessionLocal),
+        "narration":     NarrationWorker(SessionLocal),
     }
     from autonomous_media.storage import ensure_all_buckets
     try:

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from autonomous_media.workers.base import Worker, JobResult
-from autonomous_media.db.models import Job, ClipCandidate, SourceVideo, Clip
+from autonomous_media.db.models import Job, ClipCandidate, SourceVideo, Clip, SourcePost, Transcript, ContentSource, Channel
 from autonomous_media.storage import get_object_data, put_object_data
 from autonomous_media.logging import get_logger, emit_event
 from autonomous_media.exceptions import StageUnrecoverableError
@@ -20,32 +20,56 @@ class EditingWorker(Worker):
 
     def process(self, session: Session, job: Job) -> JobResult:
         clip_candidate_id = job.payload.get("clip_candidate_id")
-        if not clip_candidate_id:
-            raise StageUnrecoverableError("Missing clip_candidate_id in job payload")
+        source_post_id = job.payload.get("source_post_id")
 
-        if isinstance(clip_candidate_id, str):
-            try:
-                clip_candidate_id = uuid.UUID(clip_candidate_id)
-            except ValueError:
-                raise StageUnrecoverableError(f"Invalid clip_candidate_id format: {clip_candidate_id}")
+        if not clip_candidate_id and not source_post_id:
+            raise StageUnrecoverableError("Missing both clip_candidate_id and source_post_id in job payload")
 
-        clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == clip_candidate_id).first()
-        if not clip_candidate:
-            raise StageUnrecoverableError(f"ClipCandidate {clip_candidate_id} not found")
+        clip_candidate = None
+        source_video = None
+        source_post = None
+        transcript = None
+        caption_style = "default"
 
-        source_video = session.query(SourceVideo).filter(SourceVideo.id == clip_candidate.source_video_id).first()
-        if not source_video:
-            raise StageUnrecoverableError(f"SourceVideo {clip_candidate.source_video_id} not found")
+        if clip_candidate_id:
+            cc_uuid = uuid.UUID(clip_candidate_id) if isinstance(clip_candidate_id, str) else clip_candidate_id
+            clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == cc_uuid).first()
+            if not clip_candidate:
+                raise StageUnrecoverableError(f"ClipCandidate {clip_candidate_id} not found")
 
-        # Load transcript using source_video_id
-        # We query the Transcript table first to get the storage_key
-        from autonomous_media.db.models import Transcript
-        transcript = session.query(Transcript).filter(Transcript.source_video_id == source_video.id).first()
-        if not transcript:
-            raise StageUnrecoverableError(f"Transcript for SourceVideo {source_video.id} not found")
+            source_video = session.query(SourceVideo).filter(SourceVideo.id == clip_candidate.source_video_id).first()
+            if not source_video:
+                raise StageUnrecoverableError(f"SourceVideo {clip_candidate.source_video_id} not found")
+
+            transcript = session.query(Transcript).filter(Transcript.source_video_id == source_video.id).first()
+            if not transcript:
+                raise StageUnrecoverableError(f"Transcript for SourceVideo {source_video.id} not found")
+
+            # Resolve caption style from channel
+            content_source = session.query(ContentSource).filter(ContentSource.id == source_video.content_source_id).first()
+            if content_source:
+                channel = session.query(Channel).filter(Channel.id == content_source.channel_id).first()
+                if channel:
+                    caption_style = channel.caption_style or "default"
+        else:
+            sp_uuid = uuid.UUID(source_post_id) if isinstance(source_post_id, str) else source_post_id
+            source_post = session.query(SourcePost).filter(SourcePost.id == sp_uuid).first()
+            if not source_post:
+                raise StageUnrecoverableError(f"SourcePost {source_post_id} not found")
+
+            transcript = session.query(Transcript).filter(Transcript.source_post_id == source_post.id).first()
+            if not transcript:
+                raise StageUnrecoverableError(f"Transcript for SourcePost {source_post.id} not found")
+
+            # Resolve caption style from channel
+            content_source = session.query(ContentSource).filter(ContentSource.id == source_post.content_source_id).first()
+            if content_source:
+                channel = session.query(Channel).filter(Channel.id == content_source.channel_id).first()
+                if channel:
+                    caption_style = channel.caption_style or "default"
 
         logger.info(
-            f"Starting editing stage for clip_candidate {clip_candidate_id}",
+            f"Starting editing stage for { 'clip_candidate ' + str(clip_candidate_id) if clip_candidate else 'source_post ' + str(source_post_id) }",
             extra={"trace_id": job.trace_id}
         )
 
@@ -56,26 +80,23 @@ class EditingWorker(Worker):
         except Exception as e:
             raise StageUnrecoverableError(f"Failed to fetch or parse transcript JSON: {e}")
 
-        # 1.5 Determine caption style from channel (fallback to 'default')
-        caption_style = 'default'
-        from autonomous_media.db.models import Channel
-        content_source = session.query(SourceVideo.content_source_id).filter(SourceVideo.id == source_video.id).first()
-        if content_source:
-            from autonomous_media.db.models import ContentSource
-            channel_id_row = session.query(ContentSource.channel_id).filter(ContentSource.id == content_source[0]).first()
-            if channel_id_row:
-                channel = session.query(Channel).filter(Channel.id == channel_id_row[0]).first()
-                if channel:
-                    caption_style = channel.caption_style
-
         # 2. Build word timestamps for the clip window
-        word_ts = words_from_raw_transcript(words, clip_candidate.start_ms, clip_candidate.end_ms)
+        if clip_candidate:
+            word_ts = words_from_raw_transcript(words, clip_candidate.start_ms, clip_candidate.end_ms)
+            duration_s = int((clip_candidate.end_ms - clip_candidate.start_ms) / 1000.0)
+            ass_storage_key = f"srt/{clip_candidate_id}.ass"
+        else:
+            # Full post duration
+            word_ts = words_from_raw_transcript(words, 0, 1000000000)
+            duration_s = 0
+            if word_ts:
+                duration_s = int(word_ts[-1].end_ms / 1000.0)
+            ass_storage_key = f"srt/story-{source_post.id}.ass"
+
         if not word_ts:
             raise StageUnrecoverableError("No words found in the clip window timeline")
 
         # 3. Generate .ass subtitle file and upload to MinIO
-        #    Rendering worker will apply it during the FFmpeg encode pass.
-        ass_storage_key = f"srt/{clip_candidate_id}.ass"
         style = CaptionStyle.from_channel_config(caption_style)
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -91,14 +112,12 @@ class EditingWorker(Worker):
 
         # 4. Create Clip row
         clip_id = uuid.uuid4()
-        duration_s = int((clip_candidate.end_ms - clip_candidate.start_ms) / 1000.0)
-
-        # We set storage_key to the final video path
         final_video_key = f"clips/{clip_id}.mp4"
 
         clip = Clip(
             id=clip_id,
-            clip_candidate_id=clip_candidate_id,
+            clip_candidate_id=clip_candidate.id if clip_candidate else None,
+            source_post_id=source_post.id if source_post else None,
             channel_id=job.channel_id,
             storage_key=final_video_key,
             thumbnail_key=f"thumbnails/{clip_id}.jpg",
@@ -109,8 +128,11 @@ class EditingWorker(Worker):
         )
         session.add(clip)
         
-        # Store the ASS file key in the job payload so rendering.py can fetch it
-        next_job_payload = {"clip_id": str(clip_id), "ass_storage_key": ass_storage_key}
+        next_job_payload = {
+            "clip_id": str(clip_id), 
+            "ass_storage_key": ass_storage_key,
+            "source_post_id": str(source_post.id) if source_post else None
+        }
         
         session.flush()
 
