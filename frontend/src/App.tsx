@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, Video, LayoutDashboard, Settings, RefreshCw, Check, X, Shield, Key, Database, FileText, Film, BookOpen, Heart } from 'lucide-react';
+import { Activity, Video, LayoutDashboard, Settings, RefreshCw, Check, X, Shield, Key, Database, FileText, Film, BookOpen } from 'lucide-react';
 import './index.css';
 
 const API_BASE = window.location.origin.includes('5173') || window.location.origin.includes('3000')
