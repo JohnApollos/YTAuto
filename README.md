@@ -84,6 +84,53 @@ Containerised workers reach this host-side server at `http://host.docker.interna
 
 ---
 
+## Updating the System
+
+After pulling new code (`git pull origin master`), follow this checklist:
+
+### 1. Pull and check for DB migrations
+```powershell
+git pull origin master
+alembic upgrade head   # safe to run every time — skips if already current
+```
+
+### 2. Rebuild the frontend (only if `frontend/src/` changed)
+```powershell
+cd frontend
+npm run build
+cd ..
+```
+
+### 3. Restart the right terminals
+
+| What changed | Terminals to restart |
+|---|---|
+| `autonomous_media/api/` or any `routes.py` | **Terminal 3** (uvicorn) |
+| `autonomous_media/workers/` or `scheduler/` | **Terminal 4** (scheduler) |
+| `autonomous_media/db/models.py` or migrations | Run `alembic upgrade head`, then restart **Terminal 3 + 4** |
+| `frontend/src/` | Rebuild only (step 2 above) — no terminal restart needed |
+| `docker-compose.yml` | `docker compose down` then `docker compose up -d` — then restart **3 + 4** |
+| Model file / llama-server version | Close **Terminal 2**, relaunch `llama-server.exe` |
+
+> **Terminal map:**
+> - Terminal 1 → Docker (`docker compose up -d`)
+> - Terminal 2 → Model server (`llama-server.exe ...`)
+> - Terminal 3 → REST API (`uvicorn autonomous_media.api.main:app ...`)
+> - Terminal 4 → Scheduler (`python -m autonomous_media.main`)
+
+### Quick restart (code changes only)
+```powershell
+# In Terminal 3 — press Ctrl+C, then:
+uvicorn autonomous_media.api.main:app --host 0.0.0.0 --port 8000
+
+# In Terminal 4 — press Ctrl+C, then:
+python -m autonomous_media.main
+```
+
+Docker and the model server do **not** need to restart for Python/frontend changes.
+
+---
+
 ## Documentation Map
 
 | Document | Purpose |
