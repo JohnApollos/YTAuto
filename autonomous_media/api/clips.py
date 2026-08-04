@@ -147,10 +147,12 @@ def patch_clip(clip_id: str, body: ClipPatch, db: Session = Depends(get_db)):
             # Check if ANY publishing job (active or completed) already exists for this
             # inventory item. This prevents duplicate uploads when the quality_gate worker
             # has already automatically enqueued a publishing job.
-            has_publishing_job = db.query(Job).filter(
-                Job.type == "publishing",
-                Job.payload["inventory_item_id"].astext == str(inventory_item.id)
-            ).first() is not None
+            # We do a dialect-agnostic check of the JSON payload.
+            publishing_jobs = db.query(Job).filter(Job.type == "publishing").all()
+            has_publishing_job = any(
+                str(j.payload.get("inventory_item_id")) == str(inventory_item.id)
+                for j in publishing_jobs
+            )
 
             if not has_publishing_job:
                 new_job = Job(
