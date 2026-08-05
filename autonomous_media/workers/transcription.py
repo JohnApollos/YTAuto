@@ -111,9 +111,9 @@ class TranscriptionWorker(Worker):
             # 4. Write JSON to MinIO transcripts/{transcript_id}.json
             transcript_storage_key = f"transcripts/{transcript_id}.json"
             try:
-                # Use raw bucket for transcripts as per design
+                # Use dedicated transcripts bucket as per specification
                 put_object_data(
-                    "autonomous-media-raw",
+                    "autonomous-media-transcripts",
                     transcript_storage_key,
                     transcript_bytes,
                     content_type="application/json"

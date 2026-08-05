@@ -75,23 +75,28 @@ class EditingWorker(Worker):
 
         # 1. Fetch transcript JSON from MinIO
         try:
-            transcript_bytes = get_object_data("autonomous-media-raw", transcript.storage_key)
+            transcript_bytes = get_object_data("autonomous-media-transcripts", transcript.storage_key)
             words = json.loads(transcript_bytes.decode("utf-8"))
         except Exception as e:
-            raise StageUnrecoverableError(f"Failed to fetch or parse transcript JSON: {e}")
+            # Fallback check raw bucket if legacy key exists
+            try:
+                transcript_bytes = get_object_data("autonomous-media-raw", transcript.storage_key)
+                words = json.loads(transcript_bytes.decode("utf-8"))
+            except Exception:
+                raise StageUnrecoverableError(f"Failed to fetch or parse transcript JSON: {e}")
 
         # 2. Build word timestamps for the clip window
         if clip_candidate:
             word_ts = words_from_raw_transcript(words, clip_candidate.start_ms, clip_candidate.end_ms)
             duration_s = int((clip_candidate.end_ms - clip_candidate.start_ms) / 1000.0)
-            ass_storage_key = f"srt/{clip_candidate_id}.ass"
+            ass_storage_key = f"subtitles/{clip_candidate_id}.ass"
         else:
             # Full post duration
             word_ts = words_from_raw_transcript(words, 0, 1000000000)
             duration_s = 0
             if word_ts:
                 duration_s = int(word_ts[-1].end_ms / 1000.0)
-            ass_storage_key = f"srt/story-{source_post.id}.ass"
+            ass_storage_key = f"subtitles/story-{source_post.id}.ass"
 
         if not word_ts:
             raise StageUnrecoverableError("No words found in the clip window timeline")
@@ -102,7 +107,7 @@ class EditingWorker(Worker):
             with tempfile.TemporaryDirectory() as tmp:
                 ass_path = render_captions(word_ts, style, Path(tmp) / "captions.ass")
                 put_object_data(
-                    "autonomous-media-raw",
+                    "autonomous-media-transcripts",
                     ass_storage_key,
                     ass_path.read_bytes(),
                     content_type="text/plain"
@@ -112,7 +117,7 @@ class EditingWorker(Worker):
 
         # 4. Create Clip row
         clip_id = uuid.uuid4()
-        final_video_key = f"clips/{clip_id}.mp4"
+        final_video_key = f"renders/{clip_id}.mp4"
 
         clip = Clip(
             id=clip_id,

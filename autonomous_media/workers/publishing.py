@@ -32,6 +32,14 @@ class PublishingWorker(Worker):
         if not inventory_item:
             raise StageUnrecoverableError(f"InventoryItem {inventory_item_id} not found")
 
+        # Idempotency check: prevent duplicate publishing / re-exporting
+        if inventory_item.status == "published":
+            logger.info(
+                f"InventoryItem {inventory_item_id} is already published — skipping duplicate export/upload",
+                extra={"trace_id": job.trace_id}
+            )
+            return JobResult()
+
         clip = session.query(Clip).filter(Clip.id == inventory_item.clip_id).first()
         if not clip:
             raise StageUnrecoverableError(f"Clip {inventory_item.clip_id} not found")
@@ -141,9 +149,12 @@ class PublishingWorker(Worker):
             temp_video_path = os.path.join(temp_dir, video_filename)
 
             try:
-                download_file("autonomous-media-raw", clip.storage_key, temp_video_path)
+                download_file("autonomous-media-renders", clip.storage_key, temp_video_path)
             except Exception as e:
-                raise StageUnrecoverableError(f"Failed to download rendered clip from MinIO: {e}")
+                try:
+                    download_file("autonomous-media-raw", clip.storage_key, temp_video_path)
+                except Exception:
+                    raise StageUnrecoverableError(f"Failed to download rendered clip from MinIO: {e}")
 
             if not os.path.exists(temp_video_path):
                 raise StageUnrecoverableError(f"Rendered clip file not found at {temp_video_path}")

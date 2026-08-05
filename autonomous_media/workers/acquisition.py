@@ -43,11 +43,14 @@ class AcquisitionWorker(Worker):
 
         since_published_after = content_source.config.get("since_published_after")
 
+        max_new_items = content_source.config.get("max_new_videos_per_poll", 1)
+
         # Instantiate the clip source
         clip_source = YouTubeClipSource(
             channel_youtube_id=content_source.external_ref,
             api_key=api_key,
-            since_published_after=since_published_after
+            since_published_after=since_published_after,
+            max_new_items=max_new_items
         )
 
         try:

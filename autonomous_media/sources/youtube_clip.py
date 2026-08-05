@@ -16,10 +16,11 @@ class YouTubeClipSource:
         since_published_after: ISO 8601 datetime — only return videos newer than this.
     """
 
-    def __init__(self, channel_youtube_id: str, api_key: str, since_published_after: str | None = None):
+    def __init__(self, channel_youtube_id: str, api_key: str, since_published_after: str | None = None, max_new_items: int = 1):
         self.channel_youtube_id = channel_youtube_id
         self.api_key = api_key
         self.since_published_after = since_published_after
+        self.max_new_items = max_new_items
         self._uploads_playlist_id: str | None = None
 
     def _get_uploads_playlist_id(self) -> str:
@@ -128,6 +129,9 @@ class YouTubeClipSource:
                     url=video_url,
                     published_at=published_at
                 ))
+                if len(items) >= getattr(self, "max_new_items", 1):
+                    stop_pagination = True
+                    break
 
             if stop_pagination:
                 break

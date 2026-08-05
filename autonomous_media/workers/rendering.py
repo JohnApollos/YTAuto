@@ -104,7 +104,7 @@ class RenderingWorker(Worker):
                             # Save to MinIO & register in DB
                             asset_id = uuid.uuid4()
                             storage_key = f"backgrounds/{asset_id}.mp4"
-                            upload_file("autonomous-media-raw", storage_key, downloaded_path)
+                            upload_file("autonomous-media-renders", storage_key, downloaded_path)
                             
                             bg_asset_used = BackgroundAsset(
                                 id=asset_id,
@@ -133,9 +133,13 @@ class RenderingWorker(Worker):
 
                 # Download background video asset
                 try:
-                    download_file("autonomous-media-raw", bg_asset_used.storage_key, video_path)
+                    download_file("autonomous-media-renders", bg_asset_used.storage_key, video_path)
                 except Exception as e:
-                    raise StageUnrecoverableError(f"Failed to download background asset: {e}")
+                    # Fallback raw
+                    try:
+                        download_file("autonomous-media-raw", bg_asset_used.storage_key, video_path)
+                    except Exception:
+                        raise StageUnrecoverableError(f"Failed to download background asset: {e}")
 
                 # Download narration audio
                 try:
@@ -147,17 +151,23 @@ class RenderingWorker(Worker):
             use_ass = True
             if ass_storage_key:
                 try:
-                    download_file("autonomous-media-raw", ass_storage_key, ass_path)
+                    download_file("autonomous-media-transcripts", ass_storage_key, ass_path)
                 except Exception as e:
-                    raise StageUnrecoverableError(f"Failed to download ASS from MinIO: {e}")
+                    try:
+                        download_file("autonomous-media-raw", ass_storage_key, ass_path)
+                    except Exception:
+                        raise StageUnrecoverableError(f"Failed to download ASS from MinIO: {e}")
             else:
                 use_ass = False
                 clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == clip.clip_candidate_id).first()
                 srt_storage_key = f"srt/{clip_candidate.id}.srt" if clip_candidate else f"srt/{clip.id}.srt"
                 try:
-                    download_file("autonomous-media-raw", srt_storage_key, srt_path := os.path.join(temp_dir, "captions.srt"))
+                    download_file("autonomous-media-transcripts", srt_storage_key, srt_path := os.path.join(temp_dir, "captions.srt"))
                 except Exception as e:
-                    raise StageUnrecoverableError(f"Failed to download SRT from MinIO: {e}")
+                    try:
+                        download_file("autonomous-media-raw", srt_storage_key, srt_path := os.path.join(temp_dir, "captions.srt"))
+                    except Exception:
+                        raise StageUnrecoverableError(f"Failed to download SRT from MinIO: {e}")
 
             if not os.path.exists(video_path) or (use_ass and not os.path.exists(ass_path)) or (not use_ass and not os.path.exists(srt_path)):
                 raise StageUnrecoverableError("Downloaded input files for rendering not found")
@@ -258,7 +268,7 @@ class RenderingWorker(Worker):
 
             # 5. Upload rendered video to MinIO
             try:
-                upload_file("autonomous-media-raw", clip.storage_key, output_path)
+                upload_file("autonomous-media-renders", clip.storage_key, output_path)
             except Exception as e:
                 raise StageUnrecoverableError(f"Failed to upload rendered clip to MinIO: {e}")
 
