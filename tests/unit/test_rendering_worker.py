@@ -82,7 +82,7 @@ def test_rendering_worker_success(mock_exists, mock_run, mock_emit, mock_upload,
     mock_ffmpeg.input.assert_called()
     mock_ffmpeg.output.assert_called()
     mock_run.assert_called()
-    mock_upload.assert_called_once_with("autonomous-media-raw", f"clips/{clip_id}.mp4", ANY)
+    mock_upload.assert_called_once_with("autonomous-media-renders", f"clips/{clip_id}.mp4", ANY)
     
     # Check database updates and next job enqueuing
     mock_session.add.assert_any_call(ANY)

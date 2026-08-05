@@ -67,7 +67,7 @@ def test_transcription_worker_success(mock_exists, mock_emit, mock_put_object, m
     assert isinstance(result, JobResult)
     mock_download.assert_called_once_with("autonomous-media-raw", f"raw/{source_video_id}/audio.wav", ANY)
     mock_model.transcribe.assert_called_once()
-    mock_put_object.assert_called_once_with("autonomous-media-raw", ANY, ANY, content_type="application/json")
+    mock_put_object.assert_called_once_with("autonomous-media-transcripts", ANY, ANY, content_type="application/json")
     mock_emit.assert_called_once_with(
         event_type="transcript.ready",
         trace_id="test-trace-transcription",
