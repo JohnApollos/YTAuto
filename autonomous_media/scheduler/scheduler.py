@@ -64,7 +64,10 @@ class Scheduler:
         now_utc = datetime.now(timezone.utc)
         
         with self.session_maker() as session:
-            active_sources = session.query(ContentSource).filter(ContentSource.active == True).all()
+            active_sources = session.query(ContentSource).filter(
+                ContentSource.active == True,
+                ContentSource.type == "youtube_channel"
+            ).all()
             if not active_sources:
                 return
             

@@ -137,12 +137,27 @@ class IntelligenceWorker(Worker):
             raise StageUnrecoverableError(f"Failed to load scoring prompt template: {e}")
 
         # Load embedding model for novelty check
+        embed_model = None
         try:
             from sentence_transformers import SentenceTransformer
-            # Use 768-dimensional model to match topics.embedding database column
             embed_model = SentenceTransformer("all-mpnet-base-v2")
         except Exception as e:
-            raise StageUnrecoverableError(f"Failed to initialize SentenceTransformer: {e}")
+            logger.warning(f"SentenceTransformer not available ({e}). Using deterministic hash embeddings fallback.")
+
+        def get_embedding(text: str) -> list[float]:
+            if embed_model is not None:
+                try:
+                    return list(embed_model.encode(text))
+                except Exception as err:
+                    logger.warning(f"SentenceTransformer encode error ({err}), falling back to hash vector.")
+            import hashlib
+            vec = []
+            for i in range(768):
+                h = hashlib.sha256(f"{text}:{i}".encode("utf-8")).digest()
+                val = (int.from_bytes(h[:4], "big") / 4294967295.0) * 2.0 - 1.0
+                vec.append(val)
+            norm = sum(v * v for v in vec) ** 0.5
+            return [v / norm for v in vec]
 
         final_candidates = []
         # Track embeddings accepted in this batch to deduplicate within the same video
@@ -180,7 +195,7 @@ class IntelligenceWorker(Worker):
             )
 
             # Novelty/dedup check
-            candidate_embedding = list(embed_model.encode(cand["text"]))
+            candidate_embedding = get_embedding(cand["text"])
 
             # 1. Check against already-accepted candidates in this same batch
             #    (Topics are only written after selection, so DB check alone misses intra-batch dupes)

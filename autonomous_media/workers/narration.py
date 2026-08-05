@@ -54,11 +54,31 @@ def _resolve_voice_model(voice_profile: str | None) -> str:
     return VOICE_MODEL_PATHS[profile]
 
 
+import shutil
+import os
+
+def _find_piper_binary(default: str = "piper") -> str:
+    """Resolve piper binary path across Windows/Linux environments."""
+    if shutil.which(default):
+        return default
+    if shutil.which("piper.exe"):
+        return "piper.exe"
+    
+    candidates = [
+        os.path.join("models", "piper", "piper.exe"),
+        os.path.join("models", "piper", "piper"),
+        "C:\\piper\\piper.exe",
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return default
+
 def narrate(
     script_text: str,
     voice_profile: str | None,
     output_path: Path,
-    piper_binary: str = "piper",
+    piper_binary: str | None = None,
 ) -> NarrationResult:
     """Generates narration audio for already-prepared script text.
 
@@ -69,8 +89,10 @@ def narrate(
     voice_model = _resolve_voice_model(voice_profile)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    resolved_binary = piper_binary or _find_piper_binary()
+
     cmd = [
-        piper_binary,
+        resolved_binary,
         "--model", voice_model,
         "--output_file", str(output_path),
     ]
@@ -82,7 +104,7 @@ def narrate(
         text=True,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"Piper narration failed:\n{result.stderr}")
+        raise RuntimeError(f"Piper narration failed using binary '{resolved_binary}' and model '{voice_model}':\n{result.stderr}")
 
     duration_s = _probe_duration(output_path)
     return NarrationResult(audio_path=output_path, duration_s=duration_s)
@@ -128,9 +150,7 @@ def prepare_script(title: str, body_text: str, model_manager) -> str:
     """Thin wrapper around the Model Runtime Manager (spec section 12.9)."""
     from autonomous_media.runtime.manager import InferenceRequest
 
-    request = InferenceRequest(
-        prompt=SCRIPT_PREP_PROMPT_V1,
-        payload={"title": title, "body_text": body_text},
-    )
+    prompt_text = SCRIPT_PREP_PROMPT_V1.format(title=title, body_text=body_text)
+    request = InferenceRequest(prompt=prompt_text)
     result = model_manager.run_stage(stage="script_preparation", request=request)
     return result.text.strip()
