@@ -106,8 +106,9 @@ class TranscriptionWorker(Worker):
 
                 segments, info = model.transcribe(audio_path, word_timestamps=True)
                 
+                duration_val = int(getattr(info, "duration", 0) or 0)
                 logger.info(
-                    f"Transcription started (detected language='{info.language}', duration={int(info.duration)}s)",
+                    f"Transcription started (detected language='{getattr(info, 'language', 'en')}', duration={duration_val}s)",
                     extra={"trace_id": job.trace_id}
                 )
 
