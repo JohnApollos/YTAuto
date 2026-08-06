@@ -894,10 +894,33 @@ function App() {
         {/* TAB: EXPORTED ASSETS */}
         {activeTab === 'assets' && (
           <div>
-            <h1 className="section-title"><FolderCheck /> Local Exported Assets Library</h1>
-            <p className="text-muted" style={{ marginBottom: '24px' }}>
-              Directory location: <code style={{ color: '#93c5fd' }}>C:\dev\YTAuto\exports\</code>
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h1 className="section-title" style={{ margin: 0 }}><FolderCheck /> Local Exported Assets Library</h1>
+                <p className="text-muted" style={{ margin: '4px 0 0 0' }}>
+                  Directory location: <code style={{ color: '#93c5fd' }}>C:\dev\YTAuto\exports\</code>
+                </p>
+              </div>
+              <button 
+                className="btn btn-primary" 
+                onClick={async () => {
+                  try {
+                    showMessage('Re-exporting all clips to C:\\dev\\YTAuto\\exports with unique filenames...', 'info');
+                    const res = await fetch(`${API_BASE}/system/re-export`, { method: 'POST' });
+                    const d = await res.json();
+                    if (res.ok) {
+                      showMessage(`Re-exported ${d.re_exported_clips} clips to C:\\dev\\YTAuto\\exports!`, 'success');
+                    } else {
+                      showMessage('Re-export failed: ' + d.detail, 'danger');
+                    }
+                  } catch (e) {
+                    showMessage('Re-export error: ' + e, 'danger');
+                  }
+                }}
+              >
+                <RefreshCw size={16} style={{ marginRight: '6px' }} /> Sync / Re-export All Files to Folder
+              </button>
+            </div>
 
             <div className="grid-cards">
               {publishedClips.length === 0 ? (

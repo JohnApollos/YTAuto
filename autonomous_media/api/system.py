@@ -117,3 +117,58 @@ def test_telegram_notification(body: TelegramConfigRequest):
         "🚀 <b>YTAuto Telegram Notification Test!</b>\n\nYour Telegram Bot is connected and ready to notify you of all system jobs & video renders!"
     )
     return {"status": "sent", "success": success}
+
+
+@router.post("/re-export")
+def re_export_all_published_clips(db: Session = Depends(get_db)):
+    """Re-exports all published clips from MinIO to C:\\dev\\YTAuto\\exports with unique clip ID filenames."""
+    import os
+    import shutil
+    import tempfile
+    from autonomous_media.db.models import Clip, ClipCandidate, SourceVideo, SourcePost
+    from autonomous_media.storage import download_file
+
+    export_root = os.path.join(os.getcwd(), "exports")
+    os.makedirs(export_root, exist_ok=True)
+
+    published_clips = db.query(Clip).all()
+    exported_count = 0
+
+    for clip in published_clips:
+        if not clip.storage_key:
+            continue
+
+        clip_short_id = str(clip.id)[:8]
+        if clip.source_post_id:
+            source_post = db.query(SourcePost).filter(SourcePost.id == clip.source_post_id).first()
+            title = source_post.title if source_post else f"Story_{clip_short_id}"
+            export_subdir = os.path.join(export_root, "reddit_videos", "shorts")
+        else:
+            candidate = db.query(ClipCandidate).filter(ClipCandidate.id == clip.clip_candidate_id).first()
+            source_video = db.query(SourceVideo).filter(SourceVideo.id == candidate.source_video_id).first() if candidate else None
+            title = source_video.title if source_video else "Podcast Clips"
+            from autonomous_media.workers.publishing import sanitize_filename
+            folder_name = sanitize_filename(title)
+            export_subdir = os.path.join(export_root, "youtube_clips", folder_name)
+
+        os.makedirs(export_subdir, exist_ok=True)
+        from autonomous_media.workers.publishing import sanitize_filename
+        clean_title = sanitize_filename(title)
+        filename = f"{clean_title}_{clip_short_id}.mp4"
+        out_path = os.path.join(export_subdir, filename)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_video = os.path.join(tmp_dir, "temp.mp4")
+            try:
+                download_file("autonomous-media-renders", clip.storage_key, tmp_video)
+            except Exception:
+                try:
+                    download_file("autonomous-media-raw", clip.storage_key, tmp_video)
+                except Exception:
+                    continue
+
+            if os.path.exists(tmp_video):
+                shutil.copy2(tmp_video, out_path)
+                exported_count += 1
+
+    return {"status": "success", "re_exported_clips": exported_count}
