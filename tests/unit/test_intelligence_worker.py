@@ -84,7 +84,7 @@ def test_intelligence_worker_success(mock_stage_manager, mock_emit, mock_get_obj
     result = worker.process(mock_session, job)
     
     assert isinstance(result, JobResult)
-    mock_get_object.assert_called_once_with("autonomous-media-raw", "transcripts/some-uuid.json")
+    mock_get_object.assert_called_once_with("autonomous-media-transcripts", "transcripts/some-uuid.json")
     mock_transformer.encode.assert_called()
     mock_stage_manager.run_stage.assert_called()
     mock_emit.assert_called_once_with(
