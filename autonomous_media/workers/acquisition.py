@@ -44,13 +44,15 @@ class AcquisitionWorker(Worker):
         since_published_after = content_source.config.get("since_published_after")
 
         max_new_items = content_source.config.get("max_new_videos_per_poll", 1)
+        min_duration_s = content_source.config.get("min_duration_s", 120)
 
         # Instantiate the clip source
         clip_source = YouTubeClipSource(
             channel_youtube_id=content_source.external_ref,
             api_key=api_key,
             since_published_after=since_published_after,
-            max_new_items=max_new_items
+            max_new_items=max_new_items,
+            min_duration_s=min_duration_s
         )
 
         try:
@@ -193,6 +195,17 @@ class AcquisitionWorker(Worker):
                 )
                 session.add(sv)
                 session.flush()
+
+                # Filter out YouTube Shorts by duration threshold (default 120s)
+                min_duration_threshold = content_source.config.get("min_duration_s", 120)
+                if duration_s is not None and duration_s < min_duration_threshold:
+                    logger.info(
+                        f"Skipping transcription/clipping for video {item.external_id} ('{item.title}') — duration ({duration_s}s) is below min_duration_s ({min_duration_threshold}s), presumed YouTube Short",
+                        extra={"trace_id": trace_id}
+                    )
+                    sv.status = "ignored_short"
+                    session.commit()
+                    continue
 
                 # Emit VIDEO_DOWNLOADED event
                 emit_event(
