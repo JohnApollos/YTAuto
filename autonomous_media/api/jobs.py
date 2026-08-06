@@ -55,9 +55,9 @@ def list_jobs(
             "attempts": j.attempts,
             "max_attempts": j.max_attempts,
             "error": j.error,
-            "created_at": j.created_at.isoformat() if j.created_at else "",
-            "started_at": j.started_at.isoformat() if j.started_at else None,
-            "finished_at": j.finished_at.isoformat() if j.finished_at else None,
+            "created_at": (j.created_at.isoformat() + "Z") if j.created_at and not j.created_at.isoformat().endswith("Z") else (j.created_at.isoformat() if j.created_at else ""),
+            "started_at": (j.started_at.isoformat() + "Z") if j.started_at and not j.started_at.isoformat().endswith("Z") else (j.started_at.isoformat() if j.started_at else None),
+            "finished_at": (j.finished_at.isoformat() + "Z") if j.finished_at and not j.finished_at.isoformat().endswith("Z") else (j.finished_at.isoformat() if j.finished_at else None),
         })
 
     return {"jobs": jobs_list}

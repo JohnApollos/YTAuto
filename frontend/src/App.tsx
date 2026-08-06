@@ -743,7 +743,7 @@ function App() {
                           )}
                         </td>
                         <td style={{ padding: '14px 18px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                          {j.created_at ? new Date(j.created_at).toLocaleString() : '-'}
+                          {j.created_at ? new Date(j.created_at.endsWith('Z') ? j.created_at : j.created_at + 'Z').toLocaleString() : '-'}
                         </td>
                         <td style={{ padding: '14px 18px', textAlign: 'right' }}>
                           {(j.status === 'failed' || j.status === 'dead_letter') && (
