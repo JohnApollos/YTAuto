@@ -1,6 +1,8 @@
 import uuid
 import os
 import tempfile
+import shutil
+import gc
 import hashlib
 import yt_dlp
 import ffmpeg
