@@ -126,7 +126,33 @@ function App() {
   const [bgAssets, setBgAssets] = useState<any[]>([]);
   const [newBgUrl, setNewBgUrl] = useState('');
 
+  // Job Queue Monitor
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [jobStatusFilter, setJobStatusFilter] = useState('all');
 
+  const fetchJobs = async (statusFilter: string = jobStatusFilter) => {
+    try {
+      const url = statusFilter && statusFilter !== 'all' 
+        ? `${API_BASE}/jobs?status=${statusFilter}` 
+        : `${API_BASE}/jobs`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setJobs(data.jobs || []);
+    } catch (err) {
+      console.error('Failed to fetch jobs:', err);
+    }
+  };
+
+  const handleRetryJob = async (jobId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/jobs/${jobId}/retry`, { method: 'POST' });
+      if (!res.ok) throw new Error('Retry failed');
+      showMessage('Job re-queued successfully!', 'success');
+      fetchJobs(jobStatusFilter);
+    } catch (err: any) {
+      showMessage(err.message, 'danger');
+    }
+  };
 
   const fetchChannels = async () => {
     try {
@@ -244,6 +270,8 @@ function App() {
       if (selectedChannelId) fetchSources(selectedChannelId);
     } else if (activeTab === 'bgassets') {
       fetchBgAssets();
+    } else if (activeTab === 'jobs') {
+      fetchJobs();
     }
   }, [activeTab]);
 
@@ -460,6 +488,14 @@ function App() {
           </button>
 
           <button 
+            onClick={() => setActiveTab('jobs')} 
+            className={`btn ${activeTab === 'jobs' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ justifyContent: 'flex-start', padding: '12px 16px' }}
+          >
+            <Activity size={18} /> Job Queue & Monitor
+          </button>
+
+          <button 
             onClick={() => setActiveTab('overview')} 
             className={`btn ${activeTab === 'overview' ? 'btn-primary' : 'btn-outline'}`}
             style={{ justifyContent: 'flex-start', padding: '12px 16px' }}
@@ -624,6 +660,103 @@ function App() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: JOB QUEUE MONITOR */}
+        {activeTab === 'jobs' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h1 className="section-title" style={{ margin: 0 }}><Activity /> Job Queue & Execution Monitor</h1>
+                <p className="text-muted" style={{ margin: '4px 0 0 0' }}>
+                  Real-time visibility into all pipeline background jobs (queued, running, succeeded, failed, dead-letter).
+                </p>
+              </div>
+              <button className="btn btn-outline" onClick={() => fetchJobs(jobStatusFilter)}>
+                <RefreshCw size={16} /> Refresh Jobs
+              </button>
+            </div>
+
+            {/* Job Status Filter Tabs */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
+              {['all', 'queued', 'running', 'succeeded', 'failed', 'dead_letter', 'cancelled'].map(st => (
+                <button
+                  key={st}
+                  onClick={() => { setJobStatusFilter(st); fetchJobs(st); }}
+                  className={`btn btn-sm ${jobStatusFilter === st ? 'btn-primary' : 'btn-outline'}`}
+                  style={{ textTransform: 'capitalize' }}
+                >
+                  {st.replace('_', ' ')}
+                  <span style={{ marginLeft: '6px', opacity: 0.8, fontSize: '0.75rem' }}>
+                    ({st === 'all' ? jobs.length : jobs.filter(j => j.status === st).length})
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Jobs Table */}
+            <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+              {jobs.length === 0 ? (
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  No jobs found for status filter "{jobStatusFilter}".
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--border-color)' }}>
+                      <th style={{ padding: '14px 18px' }}>Job Type & Trace ID</th>
+                      <th style={{ padding: '14px 18px' }}>Status</th>
+                      <th style={{ padding: '14px 18px' }}>Attempts</th>
+                      <th style={{ padding: '14px 18px' }}>Error Details</th>
+                      <th style={{ padding: '14px 18px' }}>Created At</th>
+                      <th style={{ padding: '14px 18px', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jobs.map(j => (
+                      <tr key={j.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding: '14px 18px' }}>
+                          <div style={{ fontWeight: '600', color: '#f8fafc', textTransform: 'capitalize' }}>{j.type.replace('_', ' ')}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>{j.trace_id}</div>
+                        </td>
+                        <td style={{ padding: '14px 18px' }}>
+                          <span className={`badge ${
+                            j.status === 'succeeded' ? 'badge-completed' :
+                            j.status === 'running' ? 'badge-active' :
+                            j.status === 'failed' || j.status === 'dead_letter' ? 'badge-pending' : 'badge-active'
+                          }`}>
+                            {j.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 18px', fontFamily: 'monospace' }}>
+                          {j.attempts} / {j.max_attempts}
+                        </td>
+                        <td style={{ padding: '14px 18px', maxWidth: '300px' }}>
+                          {j.error ? (
+                            <span style={{ color: '#fca5a5', fontSize: '0.78rem', wordBreak: 'break-word', fontFamily: 'monospace' }}>
+                              {j.error}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>None</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '14px 18px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                          {j.created_at ? new Date(j.created_at).toLocaleString() : '-'}
+                        </td>
+                        <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                          {(j.status === 'failed' || j.status === 'dead_letter') && (
+                            <button onClick={() => handleRetryJob(j.id)} className="btn btn-primary btn-sm">
+                              <RefreshCw size={12} /> Retry Job
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}
