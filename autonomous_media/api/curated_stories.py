@@ -45,6 +45,7 @@ class StoryResponse(BaseModel):
 
 
 @router.post("", response_model=StoryResponse, status_code=201)
+@router.post("/", response_model=StoryResponse, status_code=201)
 def submit_story(
     body: StorySubmission,
     session: Session = Depends(get_db),
@@ -147,6 +148,7 @@ def submit_story(
 
 
 @router.get("", response_model=list[StoryResponse])
+@router.get("/", response_model=list[StoryResponse])
 def list_stories(
     limit: int = 50,
     session: Session = Depends(get_db),

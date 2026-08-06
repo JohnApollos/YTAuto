@@ -56,6 +56,7 @@ AssetResponse.model_rebuild()
 
 
 @router.get("", response_model=list[AssetResponse])
+@router.get("/", response_model=list[AssetResponse])
 def list_assets(
     status: str = "active",
     session: Session = Depends(get_db),
