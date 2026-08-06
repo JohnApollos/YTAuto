@@ -235,10 +235,10 @@ if os.environ.get("MODEL_ENV", "production") != "test":
         from autonomous_media.runtime.vulkan_llm_runtime import VulkanLLMRuntime
         llm_profile = ResourceProfile(ram_mb=6000, vram_mb=6000, backend="vulkan", quantization="Q4_K_M")
         llm_runtime = VulkanLLMRuntime(name="qwen3", resource_profile=llm_profile)
-        stage_manager.register("scoring", llm_runtime, fallback=llm_runtime)
-        stage_manager.register("title", llm_runtime)
-        stage_manager.register("description", llm_runtime)
-        stage_manager.register("grounding", llm_runtime)
-        stage_manager.register("script_preparation", llm_runtime)
+        stage_manager.register("scoring", llm_runtime, fallback=_stub)
+        stage_manager.register("title", llm_runtime, fallback=_stub)
+        stage_manager.register("description", llm_runtime, fallback=_stub)
+        stage_manager.register("grounding", llm_runtime, fallback=_stub)
+        stage_manager.register("script_preparation", llm_runtime, fallback=_stub)
     except Exception as e:
         logger.warning(f"Failed to register Vulkan LLM runtimes: {e}")

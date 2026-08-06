@@ -37,9 +37,12 @@ class IntelligenceWorker(Worker):
             extra={"trace_id": job.trace_id}
         )
 
-        # 1. Fetch transcript JSON from MinIO
+        # 1. Fetch transcript JSON from MinIO (autonomous-media-transcripts)
         try:
-            transcript_bytes = get_object_data("autonomous-media-raw", transcript.storage_key)
+            try:
+                transcript_bytes = get_object_data("autonomous-media-transcripts", transcript.storage_key)
+            except Exception:
+                transcript_bytes = get_object_data("autonomous-media-raw", transcript.storage_key)
             words = json.loads(transcript_bytes.decode("utf-8"))
         except Exception as e:
             raise StageUnrecoverableError(f"Failed to fetch or parse transcript JSON: {e}")
