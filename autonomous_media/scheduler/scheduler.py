@@ -20,7 +20,7 @@ from autonomous_media.logging import get_logger
 logger = get_logger("scheduler")
 
 # Spec §12.1: jobs stuck 'running' beyond this threshold are presumed dead
-HEARTBEAT_TIMEOUT_S = 120  # 2 minutes — tune downward after NFR-3 benchmark run
+HEARTBEAT_TIMEOUT_S = 900  # 15 minutes — allows large video downloads, Whisper, and FFmpeg renders to finish
 POLL_INTERVAL_S = 5
 
 

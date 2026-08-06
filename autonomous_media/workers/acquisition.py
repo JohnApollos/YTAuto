@@ -92,7 +92,8 @@ class AcquisitionWorker(Worker):
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             cookies_path = os.path.join(project_root, "cookies.txt")
 
-            with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir = tempfile.mkdtemp()
+            try:
                 video_filename = f"{item.external_id}.mp4"
                 video_path = os.path.join(temp_dir, video_filename)
                 audio_path = os.path.join(temp_dir, f"{item.external_id}.wav")
@@ -121,6 +122,10 @@ class AcquisitionWorker(Worker):
                 if not os.path.exists(video_path):
                     logger.error(f"Downloaded video file not found at {video_path}", extra={"trace_id": trace_id})
                     continue
+
+                # Update job heartbeat after download
+                job.last_heartbeat_at = datetime.now(timezone.utc)
+                session.commit()
 
                 # Compute checksum_sha256
                 sha256_hash = hashlib.sha256()
@@ -231,6 +236,10 @@ class AcquisitionWorker(Worker):
                     f"Successfully processed video {item.external_id}, enqueued transcription",
                     extra={"trace_id": trace_id}
                 )
+            finally:
+                import gc
+                gc.collect()
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
         # Update ContentSource.last_polled_at
         content_source.last_polled_at = datetime.now(timezone.utc)
