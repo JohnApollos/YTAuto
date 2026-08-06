@@ -62,27 +62,26 @@ class QualityGateWorker(Worker):
 
             qc_errors = []
 
-            # Check 1: Video stream presence
-            if not video_stream:
-                qc_errors.append("No video stream found in the rendered clip")
-            else:
-                # Check 2: Aspect Ratio (9:16 vertical)
-                width = int(video_stream.get('width', 0))
-                height = int(video_stream.get('height', 0))
-                if width <= 0 or height <= 0:
-                    qc_errors.append(f"Invalid video dimensions: {width}x{height}")
-                else:
-                    ratio = width / height
-                    expected_ratio = 9.0 / 16.0
-                    if abs(ratio - expected_ratio) > 0.05:
-                        qc_errors.append(f"Invalid aspect ratio: {width}x{height} (expected 9:16 vertical)")
+            is_story = clip.source_post_id is not None
 
-            # Check 3: Duration check (15s to 90s)
+            # Check 2: Aspect Ratio & Dimensions
+            width = int(video_stream.get('width', 0)) if video_stream else 0
+            height = int(video_stream.get('height', 0)) if video_stream else 0
+            if not video_stream or width <= 0 or height <= 0:
+                qc_errors.append(f"Invalid video dimensions: {width}x{height}")
+            elif not is_story:
+                # Podcast clips expect 9:16 vertical
+                ratio = width / height
+                expected_ratio = 9.0 / 16.0
+                if abs(ratio - expected_ratio) > 0.05:
+                    qc_errors.append(f"Invalid aspect ratio: {width}x{height} (expected 9:16 vertical)")
+
+            # Check 3: Duration check
             duration = float(probe.get('format', {}).get('duration', 0))
             if duration <= 0:
                 qc_errors.append("Video duration is zero or not found")
-            elif not (15.0 <= duration <= 90.0):
-                qc_errors.append(f"Video duration is {duration:.2f}s (must be between 15s and 90s)")
+            elif not is_story and not (5.0 <= duration <= 180.0):
+                qc_errors.append(f"Video duration is {duration:.2f}s (must be between 5s and 180s)")
 
             # Check 4: Audio presence
             if not audio_stream:
