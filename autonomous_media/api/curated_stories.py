@@ -81,7 +81,7 @@ def submit_story(
             target_channel = Channel(
                 id=uuid.uuid4(),
                 name="Default Story Channel",
-                slug="default_story_channel",
+                slug=f"default_story_channel_{uuid.uuid4().hex[:6]}",
                 niche="Reddit Stories",
                 project_id="default_project",
                 language="en"

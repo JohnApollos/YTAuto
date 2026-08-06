@@ -53,9 +53,28 @@ interface ModelHealth {
   message: string;
 }
 
+interface ToastItem {
+  id: string;
+  type: 'success' | 'danger' | 'warning' | 'info';
+  text: string;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState('stories');
-  const [message, setMessage] = useState<{ text: string; type: 'success' | 'danger' | 'info' } | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [submittingStory, setSubmittingStory] = useState(false);
+
+  const showMessage = (text: string, type: 'success' | 'danger' | 'warning' | 'info' = 'info') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, type, text }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
   
   // Channels
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -107,10 +126,7 @@ function App() {
   const [bgAssets, setBgAssets] = useState<any[]>([]);
   const [newBgUrl, setNewBgUrl] = useState('');
 
-  const showMessage = (text: string, type: 'success' | 'danger' | 'info' = 'info') => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage(null), 5000);
-  };
+
 
   const fetchChannels = async () => {
     try {
@@ -399,6 +415,24 @@ function App() {
 
   return (
     <div className="dashboard-container">
+      {/* Floating Toast Notification Stack */}
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast toast-${t.type}`}>
+            <div className="toast-content">
+              {t.type === 'success' && <CheckCircle size={18} className="toast-icon" />}
+              {t.type === 'danger' && <XCircle size={18} className="toast-icon" />}
+              {t.type === 'info' && <Activity size={18} className="toast-icon" />}
+              {t.type === 'warning' && <Shield size={18} className="toast-icon" />}
+              <span>{t.text}</span>
+            </div>
+            <button className="toast-close" onClick={() => removeToast(t.id)}>
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+
       {/* Sidebar Navigation */}
       <aside className="sidebar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
@@ -475,12 +509,7 @@ function App() {
 
       {/* Main Content Area */}
       <main className="main-content">
-        {message && (
-          <div className="glass-panel" style={{ marginBottom: '24px', borderLeft: `4px solid ${message.type === 'success' ? 'var(--success)' : message.type === 'danger' ? 'var(--danger)' : 'var(--accent-primary)'}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>{message.text}</span>
-            <button onClick={() => setMessage(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><X size={16} /></button>
-          </div>
-        )}
+
 
         {/* TAB: CURATED STORIES */}
         {activeTab === 'stories' && (
@@ -518,17 +547,34 @@ function App() {
                 <form onSubmit={async (e) => {
                   e.preventDefault();
                   if (!newStory.title || !newStory.body_text) { showMessage('Title and story body are required', 'danger'); return; }
+                  setSubmittingStory(true);
                   try {
+                    const payload: any = {
+                      title: newStory.title.trim(),
+                      body_text: newStory.body_text.trim(),
+                      subreddit: newStory.subreddit || 'r/AskReddit',
+                      author: newStory.author || undefined
+                    };
+                    if (selectedChannelId) {
+                      payload.channel_id = selectedChannelId;
+                    }
                     const res = await fetch(`${API_BASE}/curated-stories`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ channel_id: selectedChannelId, ...newStory })
+                      body: JSON.stringify(payload)
                     });
-                    if (!res.ok) throw new Error((await res.json()).detail || 'Submission failed');
-                    showMessage('Story submitted! Automated pipeline started.', 'success');
+                    if (!res.ok) {
+                      const errData = await res.json().catch(() => ({}));
+                      throw new Error(errData.detail || `Submission failed (${res.status})`);
+                    }
+                    showMessage('Story submitted successfully! Automated pipeline started.', 'success');
                     setNewStory({ title: '', body_text: '', source_url: '', author: '', subreddit: 'r/AskReddit' });
                     fetchStories();
-                  } catch (err: any) { showMessage(err.message, 'danger'); }
+                  } catch (err: any) { 
+                    showMessage(err.message || 'Failed to submit story', 'danger'); 
+                  } finally {
+                    setSubmittingStory(false);
+                  }
                 }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Target Channel</label>
@@ -550,7 +596,9 @@ function App() {
                     <input className="input" placeholder="Subreddit (e.g. r/AITA)" value={newStory.subreddit} onChange={e => setNewStory({...newStory, subreddit: e.target.value})} />
                     <input className="input" placeholder="Author (Optional)" value={newStory.author} onChange={e => setNewStory({...newStory, author: e.target.value})} />
                   </div>
-                  <button type="submit" className="btn btn-primary"><Play size={16} /> Submit Story to Pipeline</button>
+                  <button type="submit" className="btn btn-primary" disabled={submittingStory}>
+                    {submittingStory ? 'Submitting Story...' : <><Play size={16} /> Submit Story to Pipeline</>}
+                  </button>
                 </form>
               </div>
 
