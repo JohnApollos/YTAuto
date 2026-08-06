@@ -112,7 +112,7 @@ def submit_story(
 
     post = SourcePost(
         id=post_id,
-        content_source_id=cs_id,
+        content_source_id=content_source.id,
         title=body.title,
         body_text=body.body_text,
         source_url=body.source_url,
