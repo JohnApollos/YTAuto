@@ -28,7 +28,8 @@ logger = get_logger("api.curated_stories")
 
 
 class StorySubmission(BaseModel):
-    content_source_id: str  # must be a curated_story-type ContentSource
+    content_source_id: Optional[str] = None
+    channel_id: Optional[str] = None
     title: str
     body_text: str
     source_url: Optional[str] = None
@@ -51,22 +52,59 @@ def submit_story(
 ):
     """Submit a curated story for narration and publication.
     Creates a source_posts row and enqueues a script_preparation job.
+    Auto-resolves or creates a curated_story ContentSource for the target channel if needed.
     """
-    # Validate that the content source exists and is the right type
-    try:
-        cs_id = uuid.UUID(body.content_source_id)
-    except ValueError:
-        raise HTTPException(status_code=422, detail="Invalid content_source_id format")
+    content_source = None
+    if body.content_source_id:
+        try:
+            cs_id = uuid.UUID(body.content_source_id)
+            content_source = session.query(ContentSource).filter(
+                ContentSource.id == cs_id,
+            ).first()
+        except ValueError:
+            pass
 
-    content_source = session.query(ContentSource).filter(
-        ContentSource.id == cs_id,
-        ContentSource.type == "curated_story",
-    ).first()
     if not content_source:
-        raise HTTPException(
-            status_code=404,
-            detail="content_source_id not found or is not of type curated_story",
-        )
+        # Resolve target channel
+        target_channel = None
+        if body.channel_id:
+            try:
+                target_channel = session.query(Channel).filter(Channel.id == uuid.UUID(body.channel_id)).first()
+            except ValueError:
+                pass
+        if not target_channel:
+            target_channel = session.query(Channel).first()
+        
+        if not target_channel:
+            # Auto-create a default channel if none exists
+            target_channel = Channel(
+                id=uuid.uuid4(),
+                name="Default Story Channel",
+                slug="default_story_channel",
+                niche="Reddit Stories",
+                project_id="default_project",
+                language="en"
+            )
+            session.add(target_channel)
+            session.flush()
+
+        # Find or auto-create curated_story ContentSource for this channel
+        content_source = session.query(ContentSource).filter(
+            ContentSource.channel_id == target_channel.id,
+            ContentSource.type == "curated_story",
+        ).first()
+
+        if not content_source:
+            content_source = ContentSource(
+                id=uuid.uuid4(),
+                channel_id=target_channel.id,
+                type="curated_story",
+                external_ref="reddit_curated_stories",
+                config={"poll_interval_minutes": 60, "max_new_videos_per_poll": 1},
+                active=True
+            )
+            session.add(content_source)
+            session.flush()
 
     # Create the source_post row
     post_id = uuid.uuid4()

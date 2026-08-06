@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Activity, LayoutDashboard, Settings, RefreshCw, X, Shield, 
   FileText, Film, BookOpen, Play, Pause, FolderCheck, 
-  Sparkles, CheckCircle, XCircle 
+  CheckCircle, XCircle 
 } from 'lucide-react';
 import './index.css';
 
@@ -95,7 +95,6 @@ function App() {
 
   // Curated Stories
   const [stories, setStories] = useState<any[]>([]);
-  const [storySourceId, setStorySourceId] = useState('');
   const [newStory, setNewStory] = useState({ 
     title: '', 
     body_text: '', 
@@ -136,15 +135,8 @@ function App() {
       setSources(srcList);
       if (srcList.length > 0) {
         setSelectedSourceId(srcList[0].id);
-        const storySrc = srcList.find(s => s.type === 'curated_story');
-        if (storySrc) {
-          setStorySourceId(storySrc.id);
-        } else {
-          setStorySourceId(srcList[0].id);
-        }
       } else {
         setSelectedSourceId('');
-        setStorySourceId('');
       }
     } catch (err: any) {
       console.error('Failed to fetch sources:', err);
@@ -308,31 +300,7 @@ function App() {
     }
   };
 
-  const handleAutoCreateStorySource = async () => {
-    if (!selectedChannelId) {
-      showMessage('Select or create a channel first', 'danger');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE}/sources/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel_id: selectedChannelId,
-          type: 'curated_story',
-          external_ref: 'reddit_curated_stories',
-          config: { poll_interval_minutes: 60, max_new_videos_per_poll: 1 }
-        })
-      });
-      if (!res.ok) throw new Error('Failed to auto-create story source');
-      const created = await res.json();
-      showMessage('Curated Story Source created and selected!', 'success');
-      fetchSources(selectedChannelId);
-      setStorySourceId(created.id);
-    } catch (err: any) {
-      showMessage(err.message, 'danger');
-    }
-  };
+
 
   const handleToggleSourceActive = async (sourceId: string, currentActive: boolean) => {
     try {
@@ -546,27 +514,15 @@ function App() {
                 <h3 style={{ marginTop: 0, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FileText size={18} /> Submit Story for Processing
                 </h3>
-                
-                {sources.filter(s => s.type === 'curated_story').length === 0 ? (
-                  <div style={{ padding: '16px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', marginBottom: '16px' }}>
-                    <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#fcd34d' }}>
-                      No Curated Story source found for the selected channel.
-                    </p>
-                    <button onClick={handleAutoCreateStorySource} className="btn btn-primary btn-sm">
-                      <Sparkles size={14} /> Auto-Create Story Content Source
-                    </button>
-                  </div>
-                ) : null}
 
                 <form onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!storySourceId) { showMessage('Select a curated_story content source first', 'danger'); return; }
                   if (!newStory.title || !newStory.body_text) { showMessage('Title and story body are required', 'danger'); return; }
                   try {
                     const res = await fetch(`${API_BASE}/curated-stories`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ content_source_id: storySourceId, ...newStory })
+                      body: JSON.stringify({ channel_id: selectedChannelId, ...newStory })
                     });
                     if (!res.ok) throw new Error((await res.json()).detail || 'Submission failed');
                     showMessage('Story submitted! Automated pipeline started.', 'success');
@@ -575,15 +531,15 @@ function App() {
                   } catch (err: any) { showMessage(err.message, 'danger'); }
                 }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Target Content Source</label>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Target Channel</label>
                     <select 
-                      value={storySourceId} 
-                      onChange={e => setStorySourceId(e.target.value)} 
+                      value={selectedChannelId} 
+                      onChange={e => setSelectedChannelId(e.target.value)} 
                       className="input"
                     >
-                      <option value="">Select Curated Story Source...</option>
-                      {sources.filter(s => s.type === 'curated_story').map(s => (
-                        <option key={s.id} value={s.id}>{s.external_ref} (Channel ID: {s.channel_id.substring(0,8)})</option>
+                      <option value="">-- Default Channel --</option>
+                      {channels.map(c => (
+                        <option key={c.id} value={c.id}>{c.name} ({c.niche})</option>
                       ))}
                     </select>
                   </div>
