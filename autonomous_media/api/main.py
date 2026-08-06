@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -21,6 +22,15 @@ app = FastAPI(
     title="Autonomous Media API",
     version="1.5.0",
     description="Autonomous AI content production system — spec v1.5",
+)
+
+# Enable CORS for cross-origin browser requests (spec §9.1)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount all routers at /api/v1 (spec §9.1)

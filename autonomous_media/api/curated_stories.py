@@ -44,6 +44,12 @@ class StoryResponse(BaseModel):
     submitted_at: str
 
 
+@router.options("")
+@router.options("/")
+def options_stories():
+    return {}
+
+
 @router.post("", response_model=StoryResponse, status_code=201)
 @router.post("/", response_model=StoryResponse, status_code=201)
 def submit_story(
