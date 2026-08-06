@@ -185,6 +185,12 @@ class RenderingWorker(Worker):
 
             aspect_ratio = width / height
 
+            is_long_form = False
+            if is_story and source_post:
+                word_count = len((source_post.body_text or "").split())
+                if word_count > 150:
+                    is_long_form = True
+
             if not is_story:
                 clip_candidate = session.query(ClipCandidate).filter(ClipCandidate.id == clip.clip_candidate_id).first()
                 crop_region = clip_candidate.scores.get("crop_region") if clip_candidate else None
@@ -202,20 +208,28 @@ class RenderingWorker(Worker):
                 stream = ffmpeg.input(video_path, ss=start_sec, to=end_sec)
                 video = stream.video
                 audio = stream.audio
-            else:
-                # Stories: Center crop satisfying background footage
-                crop_w_norm = (9.0 / 16.0) / aspect_ratio
-                crop_x_norm = 0.5 - (crop_w_norm / 2.0)
 
-                # Narration audio is the master timeline audio
+                # Crop and scale to 9:16 vertical (1080x1920)
+                video = video.filter('crop', f"in_w*{crop_w_norm}", "in_h", f"in_w*{crop_x_norm}", 0)
+                video = video.filter('scale', 1080, 1920)
+            elif is_long_form:
+                # Long-Form Stories (>150 words): 16:9 Landscape (1920x1080)
                 stream_v = ffmpeg.input(video_path)
                 stream_a = ffmpeg.input(audio_path)
                 video = stream_v.video
                 audio = stream_a.audio
+                video = video.filter('scale', 1920, 1080)
+            else:
+                # Shorts Stories (<=150 words): Center crop to 9:16 Vertical (1080x1920)
+                crop_w_norm = (9.0 / 16.0) / aspect_ratio
+                crop_x_norm = 0.5 - (crop_w_norm / 2.0)
 
-            # Apply crop and scale to 9:16 vertical
-            video = video.filter('crop', f"in_w*{crop_w_norm}", "in_h", f"in_w*{crop_x_norm}", 0)
-            video = video.filter('scale', 1080, 1920)
+                stream_v = ffmpeg.input(video_path)
+                stream_a = ffmpeg.input(audio_path)
+                video = stream_v.video
+                audio = stream_a.audio
+                video = video.filter('crop', f"in_w*{crop_w_norm}", "in_h", f"in_w*{crop_x_norm}", 0)
+                video = video.filter('scale', 1080, 1920)
             
             # Burn in subtitles
             if use_ass:
