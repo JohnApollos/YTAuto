@@ -142,7 +142,13 @@ def re_export_all_published_clips(db: Session = Depends(get_db)):
         if clip.source_post_id:
             source_post = db.query(SourcePost).filter(SourcePost.id == clip.source_post_id).first()
             title = source_post.title if source_post else f"Story_{clip_short_id}"
-            export_subdir = os.path.join(export_root, "reddit_videos", "shorts")
+            from autonomous_media.db.models import Transcript
+            transcript = db.query(Transcript).filter(Transcript.source_post_id == clip.source_post_id).first()
+            word_count = transcript.word_count if transcript else 0
+            if word_count > 150:
+                export_subdir = os.path.join(export_root, "reddit_videos", "long_form")
+            else:
+                export_subdir = os.path.join(export_root, "reddit_videos", "shorts")
         else:
             candidate = db.query(ClipCandidate).filter(ClipCandidate.id == clip.clip_candidate_id).first()
             source_video = db.query(SourceVideo).filter(SourceVideo.id == candidate.source_video_id).first() if candidate else None
@@ -154,8 +160,9 @@ def re_export_all_published_clips(db: Session = Depends(get_db)):
         os.makedirs(export_subdir, exist_ok=True)
         from autonomous_media.workers.publishing import sanitize_filename
         clean_title = sanitize_filename(title)
-        filename = f"{clean_title}_{clip_short_id}.mp4"
-        out_path = os.path.join(export_subdir, filename)
+        filename_base = f"{clean_title}_{clip_short_id}"
+        out_video_path = os.path.join(export_subdir, f"{filename_base}.mp4")
+        out_txt_path = os.path.join(export_subdir, f"{filename_base}.txt")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_video = os.path.join(tmp_dir, "temp.mp4")
@@ -168,7 +175,17 @@ def re_export_all_published_clips(db: Session = Depends(get_db)):
                     continue
 
             if os.path.exists(tmp_video):
-                shutil.copy2(tmp_video, out_path)
+                shutil.copy2(tmp_video, out_video_path)
+                # Write corresponding metadata .txt file
+                description_text = ""
+                if clip.source_post_id and source_post:
+                    description_text = source_post.body_text or ""
+                elif source_video:
+                    description_text = f"Clip extracted from {source_video.title or 'Podcast'}\n#shorts #podcast"
+                
+                with open(out_txt_path, "w", encoding="utf-8") as tf:
+                    tf.write(f"Title: {title}\n\nDescription:\n{description_text}\n")
+                
                 exported_count += 1
 
     return {"status": "success", "re_exported_clips": exported_count}
