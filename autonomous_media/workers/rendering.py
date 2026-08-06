@@ -138,12 +138,21 @@ class RenderingWorker(Worker):
                 # Download background video asset
                 try:
                     download_file("autonomous-media-renders", bg_asset_used.storage_key, video_path)
-                except Exception as e:
-                    # Fallback raw
+                except Exception:
                     try:
                         download_file("autonomous-media-raw", bg_asset_used.storage_key, video_path)
-                    except Exception:
-                        raise StageUnrecoverableError(f"Failed to download background asset: {e}")
+                    except Exception as e:
+                        # If storage key in MinIO missing (e.g. seed data), attempt auto-downloading from YouTube source_url
+                        if bg_asset_used.source_url:
+                            logger.info(f"Background MinIO key {bg_asset_used.storage_key} missing. Downloading from YouTube {bg_asset_used.source_url}...", extra={"trace_id": job.trace_id})
+                            dl_path = download_youtube_background(bg_asset_used.source_url, temp_dir)
+                            if dl_path and os.path.exists(dl_path):
+                                upload_file("autonomous-media-renders", bg_asset_used.storage_key, dl_path)
+                                video_path = dl_path
+                            else:
+                                raise StageUnrecoverableError(f"Failed to download background asset: {e}")
+                        else:
+                            raise StageUnrecoverableError(f"Failed to download background asset: {e}")
 
                 # Download narration audio
                 try:
@@ -244,10 +253,10 @@ class RenderingWorker(Worker):
                 video = video.filter('subtitles', escaped_srt_filename, force_style='FontSize=24,PrimaryColour=&H00FFFFFF')
 
             # Compile output command
-            # For stories, we specify shortest=1 to truncate background video to narration audio length
+            # For stories, we specify shortest=None to truncate background video to narration audio length
             output_opts = {}
             if is_story:
-                output_opts["shortest"] = 1
+                output_opts["shortest"] = None
 
             args_amf = (
                 ffmpeg
