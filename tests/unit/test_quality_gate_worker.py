@@ -49,7 +49,7 @@ def test_quality_gate_worker_success(mock_exists, mock_emit, mock_download):
     result = worker.process(mock_session, job)
     
     assert isinstance(result, JobResult)
-    mock_download.assert_called_once_with("autonomous-media-raw", clip.storage_key, ANY)
+    mock_download.assert_called_once_with("autonomous-media-renders", clip.storage_key, ANY)
     mock_ffmpeg.probe.assert_called_once()
     mock_emit.assert_called_once_with(
         event_type="qc.passed",
