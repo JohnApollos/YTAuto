@@ -126,7 +126,51 @@ function App() {
   const [bgAssets, setBgAssets] = useState<any[]>([]);
   const [newBgUrl, setNewBgUrl] = useState('');
 
-  // Job Queue Monitor
+  // Telegram Bot Notifications
+  const [telegramToken, setTelegramToken] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [telegramConfigured, setTelegramConfigured] = useState(false);
+  const [testingTelegram, setTestingTelegram] = useState(false);
+
+  const fetchTelegramConfig = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/system/telegram`);
+      if (res.ok) {
+        const d = await res.json();
+        setTelegramConfigured(d.configured);
+        if (d.chat_id) setTelegramChatId(d.chat_id);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Telegram config:', err);
+    }
+  };
+
+  const handleTestTelegram = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!telegramToken || !telegramChatId) {
+      showMessage('Bot Token and Chat ID are required', 'danger');
+      return;
+    }
+    setTestingTelegram(true);
+    try {
+      const res = await fetch(`${API_BASE}/system/telegram/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bot_token: telegramToken.trim(), chat_id: telegramChatId.trim() })
+      });
+      if (res.ok) {
+        showMessage('Test notification sent to your Telegram chat!', 'success');
+        setTelegramConfigured(true);
+      } else {
+        throw new Error('Failed to send Telegram test message');
+      }
+    } catch (err: any) {
+      showMessage(err.message, 'danger');
+    } finally {
+      setTestingTelegram(false);
+    }
+  };
+
   const [jobs, setJobs] = useState<any[]>([]);
   const [jobStatusFilter, setJobStatusFilter] = useState('all');
 
@@ -210,6 +254,7 @@ function App() {
       setModels(modelData.models || {});
       const quotaData = await qRes.json();
       setQuotas(quotaData.quotas || []);
+      fetchTelegramConfig();
     } catch (err) {
       console.error('Failed to fetch system data:', err);
     } finally {
@@ -1002,6 +1047,42 @@ function App() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Telegram Bot Real-Time Alerts */}
+            <div className="glass-panel" style={{ marginTop: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Shield size={18} /> Telegram Bot Real-Time Event Alerts
+                </h4>
+                <span className={`badge ${telegramConfigured ? 'badge-completed' : 'badge-pending'}`}>
+                  {telegramConfigured ? 'Bot Connected & Active' : 'Not Configured'}
+                </span>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Receive instant Telegram push notifications on your phone for video downloads, Whisper transcriptions, viral moment scoring, Reddit story narration, video renders, and job failures.
+              </p>
+              <form onSubmit={handleTestTelegram} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px' }}>
+                <input
+                  type="password"
+                  className="input"
+                  placeholder="Telegram Bot Token (from @BotFather)"
+                  value={telegramToken}
+                  onChange={e => setTelegramToken(e.target.value)}
+                  required
+                />
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Chat ID (e.g. 123456789 or @your_channel)"
+                  value={telegramChatId}
+                  onChange={e => setTelegramChatId(e.target.value)}
+                  required
+                />
+                <button type="submit" className="btn btn-primary" disabled={testingTelegram}>
+                  {testingTelegram ? 'Testing...' : 'Test & Save Telegram Alert'}
+                </button>
+              </form>
             </div>
 
             {quotas.length > 0 && (

@@ -78,3 +78,42 @@ def get_quota(db: Session = Depends(get_db)):
             quotas.append({"project_id": pid, "remaining": 0, "error": str(e)})
             
     return {"quotas": quotas}
+
+
+from pydantic import BaseModel
+from fastapi import HTTPException
+
+class TelegramConfigRequest(BaseModel):
+    bot_token: str
+    chat_id: str
+
+
+@router.get("/telegram")
+def get_telegram_config():
+    from autonomous_media.services.telegram_bot import telegram_notifier
+    return {
+        "configured": telegram_notifier.is_configured(),
+        "bot_token_set": bool(telegram_notifier.bot_token),
+        "chat_id_set": bool(telegram_notifier.chat_id),
+        "chat_id": telegram_notifier.chat_id if telegram_notifier.chat_id else None,
+    }
+
+
+@router.post("/telegram")
+def save_telegram_config(body: TelegramConfigRequest):
+    from autonomous_media.services.telegram_bot import telegram_notifier
+    telegram_notifier.set_credentials(body.bot_token, body.chat_id)
+    return {
+        "status": "success",
+        "configured": telegram_notifier.is_configured()
+    }
+
+
+@router.post("/telegram/test")
+def test_telegram_notification(body: TelegramConfigRequest):
+    from autonomous_media.services.telegram_bot import telegram_notifier
+    telegram_notifier.set_credentials(body.bot_token, body.chat_id)
+    success = telegram_notifier.send_message(
+        "🚀 <b>YTAuto Telegram Notification Test!</b>\n\nYour Telegram Bot is connected and ready to notify you of all system jobs & video renders!"
+    )
+    return {"status": "sent", "success": success}

@@ -45,3 +45,10 @@ def emit_event(event_type: str, trace_id: str, payload: dict):
             session.commit()
     except Exception as e:
         logger.error(f"Failed to write SystemEvent to DB: {e}", extra={"trace_id": trace_id})
+
+    # Dispatch to Telegram Bot (non-blocking)
+    try:
+        from autonomous_media.services.telegram_bot import telegram_notifier
+        telegram_notifier.notify_event(event_type, trace_id, payload)
+    except Exception as e:
+        logger.warning(f"Failed to dispatch Telegram notification: {e}", extra={"trace_id": trace_id})
