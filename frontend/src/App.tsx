@@ -386,6 +386,8 @@ function App() {
     }
   };
 
+  const [uploadingFile, setUploadingFile] = useState(false);
+
   const handleAddBgAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBgUrl) return;
@@ -401,6 +403,29 @@ function App() {
       fetchBgAssets();
     } catch (err: any) {
       showMessage(err.message, 'danger');
+    }
+  };
+
+  const handleUploadLocalBgFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('license_type', 'owned');
+      const res = await fetch(`${API_BASE}/background-assets/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      showMessage(`Video file "${file.name}" uploaded successfully as a background asset!`, 'success');
+      fetchBgAssets();
+    } catch (err: any) {
+      showMessage(err.message, 'danger');
+    } finally {
+      setUploadingFile(false);
+      e.target.value = '';
     }
   };
 
@@ -721,23 +746,54 @@ function App() {
         {/* TAB: BACKGROUND ASSETS */}
         {activeTab === 'bgassets' && (
           <div>
-            <h1 className="section-title"><Film /> Creative Commons Background Assets</h1>
+            <h1 className="section-title"><Film /> Background Video Assets Library</h1>
+            <p className="text-muted" style={{ marginBottom: '24px' }}>
+              Add your own local `.mp4` video files or Creative Commons YouTube URLs to be used as background footage for story videos.
+            </p>
             
-            <div className="glass-panel" style={{ marginBottom: '24px' }}>
-              <h3>Add YouTube Background Footage</h3>
-              <form onSubmit={handleAddBgAsset} style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                <input className="input" placeholder="YouTube Video URL (e.g. https://www.youtube.com/watch?v=...)" value={newBgUrl} onChange={e => setNewBgUrl(e.target.value)} required />
-                <button type="submit" className="btn btn-primary">Register CC URL</button>
-              </form>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+              {/* Option 1: Direct Local Video File Upload */}
+              <div className="glass-panel">
+                <h3>Option 1: Upload Local Video File (.mp4)</h3>
+                <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '14px' }}>
+                  Select an `.mp4` file from your computer to upload directly as a background asset.
+                </p>
+                <label className="btn btn-primary" style={{ display: 'inline-flex', cursor: 'pointer' }}>
+                  <FolderCheck size={16} /> {uploadingFile ? 'Uploading Video...' : 'Choose Local MP4 File'}
+                  <input type="file" accept="video/mp4" onChange={handleUploadLocalBgFile} disabled={uploadingFile} style={{ display: 'none' }} />
+                </label>
+              </div>
+
+              {/* Option 2: Register YouTube CC URL */}
+              <div className="glass-panel">
+                <h3>Option 2: Register YouTube CC Video URL</h3>
+                <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '14px' }}>
+                  Enter a YouTube video URL to automatically download Creative Commons background footage.
+                </p>
+                <form onSubmit={handleAddBgAsset} style={{ display: 'flex', gap: '8px' }}>
+                  <input className="input" placeholder="YouTube URL (https://www.youtube.com/watch?v=...)" value={newBgUrl} onChange={e => setNewBgUrl(e.target.value)} required />
+                  <button type="submit" className="btn btn-primary btn-sm">Register URL</button>
+                </form>
+              </div>
             </div>
 
+            <h3 style={{ marginBottom: '16px' }}>Registered Background Assets Pool ({bgAssets.length})</h3>
             <div className="grid-cards">
-              {bgAssets.map(bg => (
-                <div key={bg.id} className="glass-panel">
-                  <h4 style={{ wordBreak: 'break-all', fontSize: '0.85rem' }}>{bg.source_url}</h4>
-                  <span className="badge badge-active">{bg.status}</span>
+              {bgAssets.length === 0 ? (
+                <div className="glass-panel" style={{ gridColumn: '1 / -1', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  No background assets registered yet. Upload an `.mp4` file or register a YouTube URL above!
                 </div>
-              ))}
+              ) : (
+                bgAssets.map(bg => (
+                  <div key={bg.id} className="glass-panel">
+                    <h4 style={{ wordBreak: 'break-all', fontSize: '0.85rem', marginBottom: '10px' }}>{bg.source_url}</h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="badge badge-active">{bg.status}</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Key: {bg.storage_key?.substring(0, 16)}...</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}

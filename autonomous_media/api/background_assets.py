@@ -8,15 +8,16 @@ The pipeline only draws from this pre-vetted pool, never searches at render time
 from __future__ import annotations
 
 import uuid
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import tempfile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from autonomous_media.api.auth import require_auth
 from autonomous_media.db.models import BackgroundAsset
 from autonomous_media.db.session import get_db
+from autonomous_media.storage import upload_file
 
 router = APIRouter(prefix="/background-assets", tags=["background-assets"])
 
@@ -77,6 +78,40 @@ def create_asset(
         license_evidence_ref=body.license_evidence_ref,
         duration_s=body.duration_s,
         tags=body.tags,
+        status="active",
+    )
+    session.add(asset)
+    session.commit()
+    return _to_response(asset)
+
+
+@router.post("/upload", response_model=AssetResponse, status_code=201)
+def upload_local_background_asset(
+    file: UploadFile = File(...),
+    license_type: str = Form("owned"),
+    session: Session = Depends(get_db),
+    _user=Depends(require_auth),
+):
+    """Upload a local video file (.mp4) directly into MinIO and register it as an active background asset."""
+    asset_id = uuid.uuid4()
+    storage_key = f"backgrounds/{asset_id}.mp4"
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        contents = file.file.read()
+        tmp.write(contents)
+        tmp_path = tmp.name
+
+    try:
+        upload_file("autonomous-media-renders", storage_key, tmp_path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+    asset = BackgroundAsset(
+        id=asset_id,
+        storage_key=storage_key,
+        source_url=f"local://{file.filename}",
+        license_type=license_type,
         status="active",
     )
     session.add(asset)
