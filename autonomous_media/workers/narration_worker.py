@@ -54,16 +54,29 @@ class NarrationWorker(Worker):
                     output_path=local_audio_path
                 )
             except Exception as e:
-                # Mock fallback if Piper is not installed/setup on dev machine
-                logger.warning(f"Piper execution failed: {e}. Writing mock mock audio.", extra={"trace_id": job.trace_id})
-                # Create a tiny mock wav file (header + empty data)
-                import wave
-                with wave.open(str(local_audio_path), "wb") as wav:
-                    wav.setnchannels(1)
-                    wav.setsampwidth(2)
-                    wav.setframerate(16000)
-                    # 5 seconds of silence
-                    wav.writeframes(b"\x00" * 32000 * 5)
+                # Fallback to gTTS voice synthesis if Piper is not installed/setup on machine
+                logger.warning(f"Piper execution failed: {e}. Falling back to gTTS voice synthesis.", extra={"trace_id": job.trace_id})
+                try:
+                    from gtts import gTTS
+                    text_to_speak = post.script_text or post.body_text or "This is an automated story narration video."
+                    tts = gTTS(text=text_to_speak, lang="en")
+                    mp3_temp = Path(temp_dir) / "narration_temp.mp3"
+                    tts.save(str(mp3_temp))
+                    
+                    import subprocess
+                    # Convert MP3 to 16kHz mono WAV for Whisper & FFmpeg rendering
+                    try:
+                        subprocess.run(["ffmpeg", "-i", str(mp3_temp), "-ar", "16000", "-ac", "1", str(local_audio_path), "-y"], check=True, capture_output=True)
+                    except Exception:
+                        subprocess.run(f'ffmpeg -i "{mp3_temp}" -ar 16000 -ac 1 "{local_audio_path}" -y', shell=True, check=True)
+                except Exception as fallback_err:
+                    logger.error(f"gTTS fallback failed: {fallback_err}. Writing silent audio fallback.", extra={"trace_id": job.trace_id})
+                    import wave
+                    with wave.open(str(local_audio_path), "wb") as wav:
+                        wav.setnchannels(1)
+                        wav.setsampwidth(2)
+                        wav.setframerate(16000)
+                        wav.writeframes(b"\x00" * 32000 * 30)
 
             # Upload generated WAV to MinIO at standard location for the transcription worker
             audio_storage_key = f"raw/story-{post.id}/audio.wav"
