@@ -54,11 +54,12 @@ class NarrationWorker(Worker):
                     output_path=local_audio_path
                 )
             except Exception as e:
-                # Fallback to gTTS voice synthesis if Piper is not installed/setup on machine
-                logger.warning(f"Piper execution failed: {e}. Falling back to gTTS voice synthesis.", extra={"trace_id": job.trace_id})
+                # Fallback 1: gTTS voice synthesis
+                logger.warning(f"Piper execution failed: {e}. Falling back to gTTS / pyttsx3 voice synthesis.", extra={"trace_id": job.trace_id})
+                text_to_speak = post.script_text or post.body_text or "This is an automated story narration video."
+                success_tts = False
                 try:
                     from gtts import gTTS
-                    text_to_speak = post.script_text or post.body_text or "This is an automated story narration video."
                     tts = gTTS(text=text_to_speak, lang="en")
                     mp3_temp = Path(temp_dir) / "narration_temp.mp3"
                     tts.save(str(mp3_temp))
@@ -69,14 +70,20 @@ class NarrationWorker(Worker):
                         subprocess.run(["ffmpeg", "-i", str(mp3_temp), "-ar", "16000", "-ac", "1", str(local_audio_path), "-y"], check=True, capture_output=True)
                     except Exception:
                         subprocess.run(f'ffmpeg -i "{mp3_temp}" -ar 16000 -ac 1 "{local_audio_path}" -y', shell=True, check=True)
-                except Exception as fallback_err:
-                    logger.error(f"gTTS fallback failed: {fallback_err}. Writing silent audio fallback.", extra={"trace_id": job.trace_id})
-                    import wave
-                    with wave.open(str(local_audio_path), "wb") as wav:
-                        wav.setnchannels(1)
-                        wav.setsampwidth(2)
-                        wav.setframerate(16000)
-                        wav.writeframes(b"\x00" * 32000 * 30)
+                    success_tts = True
+                except Exception as gtts_err:
+                    logger.warning(f"gTTS fallback failed: {gtts_err}. Trying offline pyttsx3...", extra={"trace_id": job.trace_id})
+
+                if not success_tts:
+                    try:
+                        import pyttsx3
+                        engine = pyttsx3.init()
+                        engine.save_to_file(text_to_speak, str(local_audio_path))
+                        engine.runAndWait()
+                        success_tts = True
+                        logger.info("Successfully synthesized audio via pyttsx3 offline TTS", extra={"trace_id": job.trace_id})
+                    except Exception as pyttsx_err:
+                        logger.error(f"pyttsx3 fallback failed: {pyttsx_err}.", extra={"trace_id": job.trace_id})
 
             # Upload generated WAV to MinIO at standard location for the transcription worker
             audio_storage_key = f"raw/story-{post.id}/audio.wav"
