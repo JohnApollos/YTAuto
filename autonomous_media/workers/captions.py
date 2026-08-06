@@ -100,6 +100,14 @@ class WordTimestamp:
     start_s: float
     end_s: float
 
+    @property
+    def start_ms(self) -> int:
+        return int(self.start_s * 1000)
+
+    @property
+    def end_ms(self) -> int:
+        return int(self.end_s * 1000)
+
 
 SENTENCE_ENDERS = (".", "!", "?")
 

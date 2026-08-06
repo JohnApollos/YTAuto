@@ -38,9 +38,12 @@ class QualityGateWorker(Worker):
             video_filename = f"{clip_id}_rendered.mp4"
             video_path = os.path.join(temp_dir, video_filename)
 
-            # 1. Download rendered video from MinIO
+            # 1. Download rendered video from MinIO (autonomous-media-renders)
             try:
-                download_file("autonomous-media-raw", clip.storage_key, video_path)
+                try:
+                    download_file("autonomous-media-renders", clip.storage_key, video_path)
+                except Exception:
+                    download_file("autonomous-media-raw", clip.storage_key, video_path)
             except Exception as e:
                 raise StageUnrecoverableError(f"Failed to download rendered video from MinIO: {e}")
 
