@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 import os
 import tempfile
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -41,12 +42,17 @@ class AssetPatch(BaseModel):
 class AssetResponse(BaseModel):
     id: str
     storage_key: str
-    source_url: Optional[str]
+    source_url: Optional[str] = None
     license_type: str
-    license_evidence_ref: Optional[str]
-    duration_s: Optional[float]
-    tags: list[str]
+    license_evidence_ref: Optional[str] = None
+    duration_s: Optional[float] = None
+    tags: list[str] = []
     status: str
+
+
+AssetCreate.model_rebuild()
+AssetPatch.model_rebuild()
+AssetResponse.model_rebuild()
 
 
 @router.get("", response_model=list[AssetResponse])
