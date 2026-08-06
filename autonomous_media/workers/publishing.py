@@ -142,9 +142,11 @@ class PublishingWorker(Worker):
                 export_subdir = os.path.join(export_root, "reddit_videos", "shorts")
 
         os.makedirs(export_subdir, exist_ok=True)
-        sanitized_title = sanitize_filename(video_title or f"clip_{clip.id}")
-        export_video_path = os.path.join(export_subdir, f"{sanitized_title}.mp4")
-        export_txt_path = os.path.join(export_subdir, f"{sanitized_title}.txt")
+        clip_short_id = str(clip.id)[:8]
+        sanitized_title = sanitize_filename(video_title or f"clip_{clip_short_id}")
+        export_filename = f"{sanitized_title}_{clip_short_id}"
+        export_video_path = os.path.join(export_subdir, f"{export_filename}.mp4")
+        export_txt_path = os.path.join(export_subdir, f"{export_filename}.txt")
 
         # 4. Fetch the rendered video clip file from MinIO
         with tempfile.TemporaryDirectory() as temp_dir:

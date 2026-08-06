@@ -67,7 +67,10 @@ def get_clip_video(clip_id: str, db: Session = Depends(get_db)):
     from autonomous_media.storage import get_minio_client
     try:
         client = get_minio_client()
-        response = client.get_object("autonomous-media-raw", clip.storage_key)
+        try:
+            response = client.get_object("autonomous-media-renders", clip.storage_key)
+        except Exception:
+            response = client.get_object("autonomous-media-raw", clip.storage_key)
 
         def iter_file():
             try:
