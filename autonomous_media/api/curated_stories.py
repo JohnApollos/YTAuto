@@ -176,3 +176,26 @@ def list_stories(
         )
         for p in posts
     ]
+
+
+@router.post("/re-queue-all")
+def re_queue_all_stories(session: Session = Depends(get_db)):
+    """Re-queues all curated stories for script_preparation and narration using new gTTS voice synthesis."""
+    posts = session.query(SourcePost).all()
+    requeued = 0
+    for p in posts:
+        p.status = "submitted"
+        trace_id = f"story-{p.id}"
+        job = Job(
+            type="narration",
+            payload={"source_post_id": str(p.id)},
+            trace_id=trace_id,
+            priority=5,
+            attempts=0,
+            max_attempts=3,
+        )
+        session.add(job)
+        requeued += 1
+
+    session.commit()
+    return {"status": "success", "requeued_stories": requeued}

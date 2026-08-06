@@ -227,17 +227,43 @@ class RenderingWorker(Worker):
                 video = video.filter('scale', 1080, 1920)
             elif is_long_form:
                 # Long-Form Stories (>150 words): 16:9 Landscape (1920x1080)
-                stream_v = ffmpeg.input(video_path)
+                # Random inner segment from long background asset
+                import random
+                bg_ss = 0.0
+                try:
+                    probe_bg = ffmpeg.probe(video_path)
+                    probe_aud = ffmpeg.probe(audio_path)
+                    bg_dur = float(probe_bg.get('format', {}).get('duration', 0))
+                    aud_dur = float(probe_aud.get('format', {}).get('duration', 10.0))
+                    if bg_dur > aud_dur + 10.0:
+                        bg_ss = random.uniform(5.0, bg_dur - aud_dur - 5.0)
+                except Exception:
+                    pass
+
+                stream_v = ffmpeg.input(video_path, ss=bg_ss)
                 stream_a = ffmpeg.input(audio_path)
                 video = stream_v.video
                 audio = stream_a.audio
                 video = video.filter('scale', 1920, 1080)
             else:
                 # Shorts Stories (<=150 words): Center crop to 9:16 Vertical (1080x1920)
+                # Random inner segment from long background asset
+                import random
+                bg_ss = 0.0
+                try:
+                    probe_bg = ffmpeg.probe(video_path)
+                    probe_aud = ffmpeg.probe(audio_path)
+                    bg_dur = float(probe_bg.get('format', {}).get('duration', 0))
+                    aud_dur = float(probe_aud.get('format', {}).get('duration', 10.0))
+                    if bg_dur > aud_dur + 10.0:
+                        bg_ss = random.uniform(5.0, bg_dur - aud_dur - 5.0)
+                except Exception:
+                    pass
+
                 crop_w_norm = (9.0 / 16.0) / aspect_ratio
                 crop_x_norm = 0.5 - (crop_w_norm / 2.0)
 
-                stream_v = ffmpeg.input(video_path)
+                stream_v = ffmpeg.input(video_path, ss=bg_ss)
                 stream_a = ffmpeg.input(audio_path)
                 video = stream_v.video
                 audio = stream_a.audio

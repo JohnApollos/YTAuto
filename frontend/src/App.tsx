@@ -595,10 +595,34 @@ function App() {
         {/* TAB: CURATED STORIES */}
         {activeTab === 'stories' && (
           <div>
-            <h1 className="section-title"><BookOpen /> Curated Reddit Stories Production</h1>
-            <p className="text-muted" style={{ marginBottom: '24px' }}>
-              Submit Reddit stories or narratives for automated voice synthesis, subtitle rendering, and local export.
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h1 className="section-title" style={{ margin: 0 }}><BookOpen /> Curated Reddit Stories Production</h1>
+                <p className="text-muted" style={{ margin: '4px 0 0 0' }}>
+                  Submit Reddit stories or narratives for automated voice synthesis, subtitle rendering, and local export.
+                </p>
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={async () => {
+                  try {
+                    showMessage('Re-queuing all stories for gTTS human voice narration & rendering...', 'info');
+                    const res = await fetch(`${API_BASE}/curated-stories/re-queue-all`, { method: 'POST' });
+                    const data = await res.json();
+                    if (res.ok) {
+                      showMessage(`Successfully re-queued ${data.requeued_stories} stories for voice narration!`, 'success');
+                      fetchStories();
+                    } else {
+                      showMessage('Re-queue failed: ' + data.detail, 'danger');
+                    }
+                  } catch (err) {
+                    showMessage('Re-queue error: ' + err, 'danger');
+                  }
+                }}
+              >
+                <RefreshCw size={16} style={{ marginRight: '6px' }} /> Re-generate & Render All Stories (gTTS Voice)
+              </button>
+            </div>
 
             {/* Visual Flowchart Stepper */}
             <div className="glass-panel" style={{ marginBottom: '24px' }}>
