@@ -82,7 +82,10 @@ class PublishingWorker(Worker):
             if transcript:
                 try:
                     from autonomous_media.storage import get_object_data
-                    transcript_bytes = get_object_data("autonomous-media-raw", transcript.storage_key)
+                    try:
+                        transcript_bytes = get_object_data("autonomous-media-transcripts", transcript.storage_key)
+                    except Exception:
+                        transcript_bytes = get_object_data("autonomous-media-raw", transcript.storage_key)
                     words = json.loads(transcript_bytes.decode("utf-8"))
                 except Exception as e:
                     logger.warning(f"Could not load transcript for metadata: {e}")

@@ -82,9 +82,13 @@ class RenderingWorker(Worker):
                 except Exception as e:
                     raise StageUnrecoverableError(f"Failed to download video from MinIO: {e}")
             else:
-                # Reddit stories workflow: Resolve background asset
-                content_source = session.query(ContentSource).filter(ContentSource.id == clip.source_post_id).first()
-                # Try finding in content source config
+                # Reddit stories workflow: Resolve background asset & source_post
+                sp_uuid = uuid.UUID(source_post_id) if isinstance(source_post_id, str) else source_post_id
+                source_post = session.query(SourcePost).filter(SourcePost.id == sp_uuid).first()
+                if not source_post:
+                    raise StageUnrecoverableError(f"SourcePost {source_post_id} not found")
+
+                content_source = session.query(ContentSource).filter(ContentSource.id == source_post.content_source_id).first()
                 bg_urls = []
                 if content_source and content_source.config:
                     bg_urls = content_source.config.get("background_urls", [])
