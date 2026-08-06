@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from autonomous_media.api.auth import require_auth
-from autonomous_media.db.models import ContentSource, SourcePost, Job
+from autonomous_media.db.models import ContentSource, SourcePost, Job, Channel
 from autonomous_media.db.session import get_db
 from autonomous_media.logging import get_logger
 
