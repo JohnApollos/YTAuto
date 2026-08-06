@@ -80,14 +80,45 @@ class TranscriptionWorker(Worker):
             except Exception as e:
                 logger.warning(f"ffmpeg probe failed on {audio_path}: {e}", extra={"trace_id": job.trace_id})
 
-            # 2. Run faster-whisper (device="cpu", compute_type="int8" for CPU fallback/testing/Windows constraints)
+            # 2. Run faster-whisper with device auto-detection (CUDA GPU if available, else CPU int8)
             try:
-                # spec §12.3 Whisper Large-v3-Turbo
-                model = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8")
+                device = "cpu"
+                compute_type = "int8"
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        device = "cuda"
+                        compute_type = "float16"
+                except Exception:
+                    pass
+
+                model_name = os.getenv("WHISPER_MODEL", "base")
+                logger.info(
+                    f"Loading Whisper model '{model_name}' on device='{device}', compute_type='{compute_type}'...",
+                    extra={"trace_id": job.trace_id}
+                )
+
+                model = WhisperModel(model_name, device=device, compute_type=compute_type, cpu_threads=4)
+                
+                # Update heartbeat before starting transcribe stream
+                job.last_heartbeat_at = datetime.now(timezone.utc)
+                session.commit()
+
                 segments, info = model.transcribe(audio_path, word_timestamps=True)
                 
-                # We convert segments to list immediately to trigger lazy evaluation and execute transcription
-                segments = list(segments)
+                logger.info(
+                    f"Transcription started (detected language='{info.language}', duration={int(info.duration)}s)",
+                    extra={"trace_id": job.trace_id}
+                )
+
+                # Convert generator to list while logging progress
+                segments_list = []
+                for seg in segments:
+                    segments_list.append(seg)
+                    job.last_heartbeat_at = datetime.now(timezone.utc)
+                    session.commit()
+                
+                segments = segments_list
             except Exception as e:
                 raise StageUnrecoverableError(f"faster-whisper transcription failed: {e}")
 
