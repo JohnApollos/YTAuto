@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Activity, LayoutDashboard, Settings, RefreshCw, X, Shield, 
   FileText, Film, BookOpen, Play, Pause, FolderCheck, 
@@ -131,6 +131,47 @@ function App() {
   const [telegramChatId, setTelegramChatId] = useState('');
   const [telegramConfigured, setTelegramConfigured] = useState(false);
   const [testingTelegram, setTestingTelegram] = useState(false);
+
+  // Sorting, filtering, and search state for Exported Assets Library
+  const [assetSearchQuery, setAssetSearchQuery] = useState('');
+  const [assetSortBy, setAssetSortBy] = useState<'date_desc' | 'date_asc' | 'duration_desc' | 'duration_asc'>('date_desc');
+  const [assetFilterFormat, setAssetFilterFormat] = useState<'all' | 'youtube_clip' | 'reddit_story'>('all');
+
+  const filteredAndSortedClips = useMemo(() => {
+    let list = [...publishedClips];
+
+    // Filter by Search Query (ID)
+    if (assetSearchQuery.trim()) {
+      const q = assetSearchQuery.toLowerCase().trim();
+      list = list.filter(clip => clip.id.toLowerCase().includes(q));
+    }
+
+    // Filter by Category
+    if (assetFilterFormat === 'reddit_story') {
+      list = list.filter(clip => clip.source_post_id !== null);
+    } else if (assetFilterFormat === 'youtube_clip') {
+      list = list.filter(clip => clip.source_post_id === null);
+    }
+
+    // Sort by Selection
+    list.sort((a, b) => {
+      const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+      if (assetSortBy === 'date_desc') {
+        return dateB - dateA;
+      } else if (assetSortBy === 'date_asc') {
+        return dateA - dateB;
+      } else if (assetSortBy === 'duration_desc') {
+        return (b.duration_s || 0) - (a.duration_s || 0);
+      } else if (assetSortBy === 'duration_asc') {
+        return (a.duration_s || 0) - (b.duration_s || 0);
+      }
+      return 0;
+    });
+
+    return list;
+  }, [publishedClips, assetSearchQuery, assetSortBy, assetFilterFormat]);
 
   const fetchTelegramConfig = async () => {
     try {
@@ -914,6 +955,9 @@ function App() {
         {activeTab === 'candidates' && (
           <div>
             <h1 className="section-title"><Activity /> Quality Gate Review Queue</h1>
+            <p className="text-muted" style={{ marginBottom: '24px' }}>
+              Preview rendered videos, listen to voice narration, verify subtitles, and approve or reject clips before local export.
+            </p>
             {reviewClips.length === 0 ? (
               <div className="glass-panel" style={{ textAlign: 'center', padding: '40px' }}>
                 <h3>No clips waiting in the review queue.</h3>
@@ -921,12 +965,25 @@ function App() {
             ) : (
               <div className="grid-cards">
                 {reviewClips.map(clip => (
-                  <div key={clip.id} className="glass-panel">
-                    <h4>Clip ID: {clip.id.substring(0, 8)}...</h4>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Duration: {clip.duration_s}s</p>
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                      <button onClick={() => handleClipAction(clip.id, true)} className="btn btn-success btn-sm"><CheckCircle size={14} /> Approve</button>
-                      <button onClick={() => handleClipAction(clip.id, false)} className="btn btn-outline btn-sm" style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}><XCircle size={14} /> Reject</button>
+                  <div key={clip.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', padding: '16px' }}>
+                    <div style={{ height: '260px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'black', marginBottom: '16px' }}>
+                      <video 
+                        src={`${API_BASE}/clips/${clip.id}/video`} 
+                        controls 
+                        preload="metadata"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem' }}>Clip ID: {clip.id.substring(0, 8)}...</h4>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                      Type: {clip.source_post_id ? '📖 Reddit Story' : '🎙️ Podcast Clip'}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                      Duration: {clip.duration_s}s
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+                      <button onClick={() => handleClipAction(clip.id, true)} className="btn btn-success btn-sm" style={{ flex: 1 }}><CheckCircle size={14} /> Approve (Publish)</button>
+                      <button onClick={() => handleClipAction(clip.id, false)} className="btn btn-outline btn-sm" style={{ flex: 1, borderColor: 'var(--danger)', color: 'var(--danger)' }}><XCircle size={14} /> Reject</button>
                     </div>
                   </div>
                 ))}
@@ -966,25 +1023,68 @@ function App() {
               </button>
             </div>
 
+            {/* Sorting, Filtering, and Search Toolbar */}
+            <div className="glass-panel" style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ flex: '1 1 200px' }}>
+                <input 
+                  className="input" 
+                  placeholder="🔍 Search clip ID..." 
+                  value={assetSearchQuery} 
+                  onChange={e => setAssetSearchQuery(e.target.value)} 
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Sort By:</label>
+                <select className="input" value={assetSortBy} onChange={e => setAssetSortBy(e.target.value as any)}>
+                  <option value="date_desc">📅 Newest First (Date)</option>
+                  <option value="date_asc">📅 Oldest First (Date)</option>
+                  <option value="duration_desc">⏱️ Duration (Longest First)</option>
+                  <option value="duration_asc">⏱️ Duration (Shortest First)</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Category:</label>
+                <select className="input" value={assetFilterFormat} onChange={e => setAssetFilterFormat(e.target.value as any)}>
+                  <option value="all">🌐 All Formats ({publishedClips.length})</option>
+                  <option value="youtube_clip">🎙️ Podcast / YouTube Clips</option>
+                  <option value="reddit_story">📖 Reddit Story Videos</option>
+                </select>
+              </div>
+            </div>
+
             <div className="grid-cards">
-              {publishedClips.length === 0 ? (
-                <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-                  <h4>No published clips found in the library yet.</h4>
+              {filteredAndSortedClips.length === 0 ? (
+                <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)', gridColumn: '1 / -1' }}>
+                  <h4>No published clips found matching your filters.</h4>
                 </div>
               ) : (
-                publishedClips.map(clip => (
+                filteredAndSortedClips.map(clip => (
                   <div key={clip.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', padding: '16px' }}>
                     <div style={{ height: '240px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'black', marginBottom: '16px' }}>
                       <video 
                         src={`${API_BASE}/clips/${clip.id}/video`} 
                         controls 
                         preload="metadata"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                       />
                     </div>
-                    <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem' }}>Clip ID: {clip.id.substring(0, 8)}...</h4>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>Duration: {clip.duration_s}s</div>
-                    <span className="badge badge-completed" style={{ alignSelf: 'flex-start' }}>Exported</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Clip ID: {clip.id.substring(0, 8)}...</h4>
+                      <span className="badge badge-completed">Exported</span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                      Category: {clip.source_post_id ? '📖 Reddit Story' : '🎙️ Podcast Clip'}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                      Duration: {clip.duration_s}s
+                    </div>
+                    {clip.created_at && (
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 'auto' }}>
+                        Date: {new Date(clip.created_at).toLocaleString()}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
