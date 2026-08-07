@@ -180,15 +180,25 @@ def list_stories(
 
 @router.post("/re-queue-all")
 def re_queue_all_stories(session: Session = Depends(get_db)):
-    """Re-queues all curated stories for script_preparation and narration using new gTTS voice synthesis."""
+    """Re-queues all curated stories from the beginning (script_preparation) for clean voice synthesis & 9:16 portrait rendering."""
+    from autonomous_media.db.models import Clip, Transcript
+
     posts = session.query(SourcePost).all()
     requeued = 0
     for p in posts:
         p.status = "submitted"
         p.script_text = None
+
+        # Clean up stale transcripts & clips linked to this post so they re-render freshly
+        try:
+            session.query(Transcript).filter(Transcript.source_post_id == p.id).delete(synchronize_session=False)
+            session.query(Clip).filter(Clip.source_post_id == p.id).delete(synchronize_session=False)
+        except Exception:
+            pass
+
         trace_id = f"story-{p.id}"
         job = Job(
-            type="narration",
+            type="script_preparation",
             payload={"source_post_id": str(p.id)},
             trace_id=trace_id,
             priority=5,
