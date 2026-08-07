@@ -102,7 +102,15 @@ class EditingWorker(Worker):
             raise StageUnrecoverableError("No words found in the clip window timeline")
 
         # 3. Generate .ass subtitle file and upload to MinIO
-        style = CaptionStyle.from_channel_config(caption_style)
+        # Select format-tailored caption style
+        effective_style = caption_style
+        if not effective_style or effective_style == "default" or effective_style == "hormozi_bold":
+            if source_post:
+                effective_style = "reddit_longform" if duration_s > 60 else "reddit_shorts"
+            else:
+                effective_style = "podcast_shorts"
+
+        style = CaptionStyle.from_channel_config(effective_style)
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 ass_path = render_captions(word_ts, style, Path(tmp) / "captions.ass")

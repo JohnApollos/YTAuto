@@ -50,6 +50,39 @@ class CaptionStyle:
 
 
 CAPTION_PRESETS: dict[str, CaptionStyle] = {
+    "reddit_shorts": CaptionStyle(
+        name="reddit_shorts",
+        font="Montserrat ExtraBold",
+        font_size=84,
+        primary_color="&H00FFFFFF",
+        outline_color="&H00000000",
+        highlight_color="&H0000FFFF",  # Vibrant yellow active word pop
+        max_words_per_screen=3,
+        uppercase=True,
+        position_margin_v=240,         # Clears YouTube Shorts UI buttons
+    ),
+    "podcast_shorts": CaptionStyle(
+        name="podcast_shorts",
+        font="Anton",
+        font_size=90,
+        primary_color="&H00FFFFFF",
+        outline_color="&H00000000",
+        highlight_color="&H0000FFFF",  # Vibrant yellow active word pop
+        max_words_per_screen=3,
+        uppercase=True,
+        position_margin_v=240,         # Clears YouTube Shorts UI buttons
+    ),
+    "reddit_longform": CaptionStyle(
+        name="reddit_longform",
+        font="Poppins Bold",
+        font_size=64,
+        primary_color="&H00FFFFFF",
+        outline_color="&H00000000",
+        highlight_color="&H0000FFFF",
+        max_words_per_screen=9,         # Calmer, sentence-by-sentence max 2 lines
+        uppercase=False,
+        position_margin_v=120,
+    ),
     "hormozi_bold": CaptionStyle(
         name="hormozi_bold",
         font="Montserrat ExtraBold",
@@ -77,7 +110,6 @@ CAPTION_PRESETS: dict[str, CaptionStyle] = {
         highlight_color="&H0000FFFF",
         max_words_per_screen=5,
     ),
-    # fallback for channels using legacy 'default' preset name
     "default": CaptionStyle(
         name="default",
         font="Montserrat ExtraBold",
