@@ -35,3 +35,5 @@ frontend/dist/
 *.db
 client_secrets.json
 token.json
+models/piper/
+exports/

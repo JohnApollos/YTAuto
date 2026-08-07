@@ -89,19 +89,23 @@ def narrate(
     voice_model = _resolve_voice_model(voice_profile)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    resolved_binary = piper_binary or _find_piper_binary()
+    resolved_binary = os.path.abspath(piper_binary or _find_piper_binary())
+    resolved_model = os.path.abspath(voice_model)
+    resolved_output = os.path.abspath(output_path)
 
     cmd = [
         resolved_binary,
-        "--model", voice_model,
-        "--output_file", str(output_path),
+        "--model", resolved_model,
+        "--output_file", resolved_output,
     ]
 
+    piper_dir = os.path.dirname(resolved_binary)
     result = subprocess.run(
         cmd,
         input=script_text,
         capture_output=True,
         text=True,
+        cwd=piper_dir if os.path.exists(piper_dir) else None
     )
     if result.returncode != 0:
         raise RuntimeError(f"Piper narration failed using binary '{resolved_binary}' and model '{voice_model}':\n{result.stderr}")
