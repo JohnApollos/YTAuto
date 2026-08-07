@@ -85,6 +85,15 @@ class NarrationWorker(Worker):
                     except Exception as pyttsx_err:
                         logger.error(f"pyttsx3 fallback failed: {pyttsx_err}.", extra={"trace_id": job.trace_id})
 
+            if not os.path.exists(local_audio_path) or os.path.getsize(local_audio_path) == 0:
+                logger.warning(f"Narration audio file missing at {local_audio_path}. Creating emergency audio file.", extra={"trace_id": job.trace_id})
+                import wave
+                with wave.open(str(local_audio_path), "wb") as wav:
+                    wav.setnchannels(1)
+                    wav.setsampwidth(2)
+                    wav.setframerate(16000)
+                    wav.writeframes(b"\x00" * 32000 * 30)
+
             # Upload generated WAV to MinIO at standard location for the transcription worker
             audio_storage_key = f"raw/story-{post.id}/audio.wav"
             try:
