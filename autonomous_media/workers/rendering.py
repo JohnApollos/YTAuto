@@ -278,10 +278,14 @@ class RenderingWorker(Worker):
                 video = video.filter('crop', f"in_w*{crop_w_norm}", "in_h", f"in_w*{crop_x_norm}", 0)
                 video = video.filter('scale', 1080, 1920)
             
-            # Burn in subtitles
+            # Burn in subtitles (using relative filename captions.ass inside temp_dir to guarantee Windows FFmpeg compatibility)
             if use_ass:
-                escaped_ass_filename = ass_filename.replace('\\', '/').replace(':', '\\:')
-                video = video.filter('ass', escaped_ass_filename)
+                local_ass = "captions.ass"
+                if os.path.exists(os.path.join(temp_dir, local_ass)):
+                    video = video.filter('ass', local_ass)
+                else:
+                    escaped_ass_filename = ass_filename.replace('\\', '/').replace(':', '\\:')
+                    video = video.filter('ass', escaped_ass_filename)
             else:
                 escaped_srt_filename = "captions.srt".replace('\\', '/').replace(':', '\\:')
                 video = video.filter('subtitles', escaped_srt_filename, force_style='FontSize=24,PrimaryColour=&H00FFFFFF')

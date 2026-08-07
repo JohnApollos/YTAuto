@@ -31,6 +31,10 @@ class NarrationResult:
 # Add new entries here as new voices are adopted.
 # ---------------------------------------------------------------------------
 
+import re
+import shutil
+import os
+
 VOICE_MODEL_PATHS: dict[str, str] = {
     "motivational_male_v1": "models/piper/en_US-ryan-high.onnx",
     "warm_female_v1": "models/piper/en_US-amy-medium.onnx",
@@ -40,8 +44,63 @@ VOICE_MODEL_PATHS: dict[str, str] = {
 DEFAULT_VOICE = "narrator_neutral_v1"
 
 
-class UnknownVoiceProfileError(Exception):
-    pass
+def normalize_spoken_script(text: str) -> str:
+    """Normalizes Reddit abbreviations, age/gender tags, and units for realistic human narration."""
+    if not text:
+        return text
+
+    # Common Reddit abbreviations
+    text = re.sub(r'\bAITA\b', 'Am I the jerk', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bNTA\b', 'Not the jerk', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bYTA\b', 'You are the jerk', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bESH\b', 'Everyone is wrong here', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bTL;?DR\b', "Too long, didn't read:", text, flags=re.IGNORECASE)
+    text = re.sub(r'\bw/\b', 'with ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bw/o\b', 'without ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bimo\b', 'in my opinion', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bimho\b', 'in my honest opinion', text, flags=re.IGNORECASE)
+    text = re.sub(r'\betc\.?\b', 'et cetera', text, flags=re.IGNORECASE)
+    text = re.sub(r'\be\.?g\.?\b', 'for example', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bi\.?e\.?\b', 'that is', text, flags=re.IGNORECASE)
+
+    # Age and gender tags: e.g. 21M, 25F, (21M), [25F] -> 21 male, 25 female
+    text = re.sub(r'\(?\b(\d{1,2})\s*M\b\)?', r'\1 male', text)
+    text = re.sub(r'\(?\b(\d{1,2})\s*F\b\)?', r'\1 female', text)
+
+    # Units & metrics
+    text = re.sub(r'\b(\d+)\s*km\b', r'\1 kilometers', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*mph\b', r'\1 miles per hour', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*kg\b', r'\1 kilograms', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*lbs?\b', r'\1 pounds', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*ft\b', r'\1 feet', text, flags=re.IGNORECASE)
+
+    # Clean up double spaces & punctuation formatting for natural pauses
+    text = text.replace('...', ', ').replace('  ', ' ')
+    return text.strip()
+
+
+def detect_narrator_voice(title: str, body_text: str) -> str:
+    """Dynamically detects whether the story narrator is female or male based on text markers."""
+    full_text = f"{title} {body_text}"
+
+    female_patterns = [
+        r'\b\d{1,2}\s*F\b', r'\bas a woman\b', r'\bam a female\b', r'\bmy husband\b',
+        r'\bmy boyfriend\b', r'\bmy bf\b', r'\bI am a woman\b', r'\bI am a girl\b'
+    ]
+    male_patterns = [
+        r'\b\d{1,2}\s*M\b', r'\bas a man\b', r'\bam a male\b', r'\bmy wife\b',
+        r'\bmy girlfriend\b', r'\bmy gf\b', r'\bI am a man\b', r'\bI am a guy\b'
+    ]
+
+    female_score = sum(1 for p in female_patterns if re.search(p, full_text, re.IGNORECASE))
+    male_score = sum(1 for p in male_patterns if re.search(p, full_text, re.IGNORECASE))
+
+    if female_score > male_score:
+        return "warm_female_v1"       # en_US-amy-medium.onnx
+    elif male_score > female_score:
+        return "motivational_male_v1"  # en_US-ryan-high.onnx
+
+    return "narrator_neutral_v1"      # en_US-lessac-high.onnx
 
 
 def _resolve_voice_model(voice_profile: str | None) -> str:

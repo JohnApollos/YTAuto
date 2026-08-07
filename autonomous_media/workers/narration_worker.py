@@ -29,8 +29,13 @@ class NarrationWorker(Worker):
         if not content_source:
             raise StageUnrecoverableError(f"ContentSource {post.content_source_id} not found")
 
+        # Resolve voice profile (auto-detect male vs female voice based on post story content if neutral)
+        from autonomous_media.workers.narration import detect_narrator_voice, normalize_spoken_script
+
         channel = session.query(Channel).filter(Channel.id == content_source.channel_id).first()
-        voice_profile = getattr(channel, "voice_profile", "narrator_neutral_v1") if channel else "narrator_neutral_v1"
+        voice_profile = getattr(channel, "voice_profile", None) if channel else None
+        if not voice_profile or voice_profile == "narrator_neutral_v1":
+            voice_profile = detect_narrator_voice(post.title, post.body_text)
 
         logger.info(
             f"Starting Piper narration for SourcePost {post.id} (voice: {voice_profile})",
@@ -45,10 +50,12 @@ class NarrationWorker(Worker):
             audio_filename = "narration.wav"
             local_audio_path = Path(temp_dir) / audio_filename
 
-            # Sanitize text to speak (ignore stub JSON rationale strings)
+            # Sanitize & normalize text for spoken flow (e.g. 21M -> 21 male, 10km -> 10 kilometers, AITA -> Am I the jerk)
             text_to_speak = post.script_text
             if not text_to_speak or "hook_strength" in text_to_speak or "Stub result" in text_to_speak or text_to_speak.strip().startswith("{"):
                 text_to_speak = f"{post.title}\n\n{post.body_text}"
+
+            text_to_speak = normalize_spoken_script(text_to_speak)
 
             try:
                 narrate(

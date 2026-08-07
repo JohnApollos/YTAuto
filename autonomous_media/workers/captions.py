@@ -194,7 +194,7 @@ def render_captions(
     style: CaptionStyle,
     output_path: Path,
 ) -> Path:
-    """Writes a complete .ass subtitle file. Returns the path written."""
+    """Writes a complete .ass subtitle file with per-word karaoke color highlighting."""
     chunks = chunk_words_for_captions(word_timestamps, max_words=style.max_words_per_screen)
 
     header = _ASS_HEADER_TEMPLATE.format(
@@ -211,13 +211,24 @@ def render_captions(
     for chunk in chunks:
         if not chunk:
             continue
-        start = _fmt_timestamp(chunk[0].start_s)
-        end = _fmt_timestamp(chunk[-1].end_s)
-        words = [w.text.strip() for w in chunk]
-        text = " ".join(w.upper() if style.uppercase else w for w in words)
-        # Escape ASS special characters that would otherwise break rendering
-        text = text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
-        events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}")
+        
+        # Emit line for each active word in chunk with color highlighting
+        for active_idx, active_word in enumerate(chunk):
+            w_start = _fmt_timestamp(active_word.start_s)
+            w_end = _fmt_timestamp(active_word.end_s if active_word.end_s > active_word.start_s else active_word.start_s + 0.3)
+            
+            formatted_words = []
+            for idx, w in enumerate(chunk):
+                raw_text = w.text.strip().upper() if style.uppercase else w.text.strip()
+                raw_text = raw_text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
+                if idx == active_idx:
+                    # Highlight active spoken word in vibrant yellow (&H0000FFFF&) with bold pop
+                    formatted_words.append(f"{{\\c&H0000FFFF&}}{raw_text}{{\\c&H00FFFFFF&}}")
+                else:
+                    formatted_words.append(raw_text)
+
+            text = " ".join(formatted_words)
+            events.append(f"Dialogue: 0,{w_start},{w_end},Default,,0,0,0,,{text}")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(header + "\n".join(events), encoding="utf-8")
