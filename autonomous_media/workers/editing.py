@@ -115,7 +115,20 @@ class EditingWorker(Worker):
         except Exception as e:
             raise StageUnrecoverableError(f"Failed to generate or upload .ass captions: {e}")
 
-        # 4. Create Clip row
+        # 4. Resolve non-null channel_id
+        resolved_channel_id = job.channel_id
+        if not resolved_channel_id:
+            if content_source:
+                resolved_channel_id = content_source.channel_id
+            if not resolved_channel_id:
+                ch = session.query(Channel).first()
+                if ch:
+                    resolved_channel_id = ch.id
+
+        if not resolved_channel_id:
+            raise StageUnrecoverableError("No channel_id found to associate with rendered Clip")
+
+        # 5. Create Clip row
         clip_id = uuid.uuid4()
         final_video_key = f"renders/{clip_id}.mp4"
 
@@ -123,7 +136,7 @@ class EditingWorker(Worker):
             id=clip_id,
             clip_candidate_id=clip_candidate.id if clip_candidate else None,
             source_post_id=source_post.id if source_post else None,
-            channel_id=job.channel_id,
+            channel_id=resolved_channel_id,
             storage_key=final_video_key,
             thumbnail_key=f"thumbnails/{clip_id}.jpg",
             duration_s=duration_s,
@@ -146,12 +159,12 @@ class EditingWorker(Worker):
             extra={"trace_id": job.trace_id}
         )
 
-        # 5. Enqueue rendering job
+        # 6. Enqueue rendering job
         next_job = Job(
             type="rendering",
             payload=next_job_payload,
             trace_id=job.trace_id,
-            channel_id=job.channel_id,
+            channel_id=resolved_channel_id,
             priority=job.priority,
             attempts=0,
             max_attempts=3
