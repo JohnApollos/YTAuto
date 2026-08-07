@@ -743,9 +743,29 @@ function App() {
                   Real-time visibility into all pipeline background jobs (queued, running, succeeded, failed, dead-letter).
                 </p>
               </div>
-              <button className="btn btn-outline" onClick={() => fetchJobs(jobStatusFilter)}>
-                <RefreshCw size={16} /> Refresh Jobs
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-outline"
+                  onClick={async () => {
+                    try {
+                      showMessage('Flushing any stuck running jobs back to queue...', 'info');
+                      const res = await fetch(`${API_BASE}/system/jobs/flush-stuck`, { method: 'POST' });
+                      const d = await res.json();
+                      if (res.ok) {
+                        showMessage(`Flushed ${d.flushed_jobs} stuck jobs back to queue!`, 'success');
+                        fetchJobs(jobStatusFilter);
+                      }
+                    } catch (e) {
+                      showMessage('Flush error: ' + e, 'danger');
+                    }
+                  }}
+                >
+                  <RefreshCw size={16} /> Flush Stuck Jobs
+                </button>
+                <button className="btn btn-outline" onClick={() => fetchJobs(jobStatusFilter)}>
+                  <RefreshCw size={16} /> Refresh Jobs
+                </button>
+              </div>
             </div>
 
             {/* Job Status Filter Tabs */}

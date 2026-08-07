@@ -189,3 +189,17 @@ def re_export_all_published_clips(db: Session = Depends(get_db)):
                 exported_count += 1
 
     return {"status": "success", "re_exported_clips": exported_count}
+
+
+@router.post("/jobs/flush-stuck")
+def flush_stuck_running_jobs(db: Session = Depends(get_db)):
+    """Resets all 'running' or stuck jobs back to 'queued' state so the scheduler resumes processing."""
+    from autonomous_media.db.models import Job
+    stuck_jobs = db.query(Job).filter(Job.status == "running").all()
+    flushed_count = 0
+    for j in stuck_jobs:
+        j.status = "queued"
+        j.error = "Manually flushed from UI"
+        flushed_count += 1
+    db.commit()
+    return {"status": "success", "flushed_jobs": flushed_count}

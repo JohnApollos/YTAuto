@@ -20,7 +20,7 @@ from autonomous_media.logging import get_logger
 logger = get_logger("scheduler")
 
 # Spec §12.1: jobs stuck 'running' beyond this threshold are presumed dead
-HEARTBEAT_TIMEOUT_S = 900  # 15 minutes — allows large video downloads, Whisper, and FFmpeg renders to finish
+HEARTBEAT_TIMEOUT_S = 90  # 90 seconds — workers heartbeat every 20s, so 90s quickly recovers dead workers
 POLL_INTERVAL_S = 5
 
 
@@ -41,6 +41,8 @@ class Scheduler:
     def start(self):
         logger.info("Scheduler starting", extra={"trace_id": "scheduler"})
         self.running = True
+        # Instantly recover any orphaned 'running' jobs left behind by previous process shutdown
+        self._recover_orphaned_running_jobs()
         while self.running:
             try:
                 self._seed_poll_jobs()
@@ -49,6 +51,24 @@ class Scheduler:
             except Exception as e:
                 logger.error(f"Scheduler poll error: {e}", extra={"trace_id": "scheduler"})
             time.sleep(POLL_INTERVAL_S)
+
+    def _recover_orphaned_running_jobs(self):
+        """
+        On scheduler startup, any job left in 'running' state was orphaned when the process shut down.
+        Instantly reset them to 'queued' or 'retrying' so the system resumes immediately.
+        """
+        with self.session_maker() as session:
+            orphaned = session.query(Job).filter(Job.status == "running").all()
+            if orphaned:
+                logger.info(
+                    f"Startup Recovery: Re-queuing {len(orphaned)} orphaned jobs left running from previous process run",
+                    extra={"trace_id": "scheduler"}
+                )
+                for job in orphaned:
+                    job.attempts += 1
+                    job.status = "queued" if job.attempts < job.max_attempts else "dead_letter"
+                    job.error = "Process restarted while job was running — automatically requeued on boot"
+                session.commit()
 
     def stop(self):
         self.running = False
