@@ -88,7 +88,7 @@ if "%ERRORLEVEL%"=="1" (
         echo       Launching local llama-server.exe...
         start "Autonomous Media - Model Runtime" /MIN llama-server.exe --model "%~dp0models\qwen3-8b-Q4_K_M.gguf" --port 8080 --gpu-layers 99
     ) else (
-        echo       llama-server.exe not present locally (development mode). Skipping native LLM server.
+        echo       [NOTICE] llama-server.exe not found on this system. Skipping native LLM server.
     )
 ) else (
     echo       llama-server is already running.

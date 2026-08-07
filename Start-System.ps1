@@ -63,7 +63,7 @@ if ($llamaExe -or (Test-Path "llama-server.exe")) {
     Write-Host "      Launching llama-server..." -ForegroundColor Green
     Start-Process -FilePath $exePath -ArgumentList "--model models\qwen3-8b-Q4_K_M.gguf --port 8080 --gpu-layers 99" -WindowStyle Minimized
 } else {
-    Write-Host "      llama-server.exe not installed locally (development mode). Skipping native LLM server." -ForegroundColor Gray
+    Write-Host "      [NOTICE] llama-server.exe not found on this system. Skipping native LLM server." -ForegroundColor Yellow
 }
 
 # 7. Frontend Build & Dev
