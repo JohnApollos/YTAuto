@@ -185,6 +185,7 @@ def re_queue_all_stories(session: Session = Depends(get_db)):
     requeued = 0
     for p in posts:
         p.status = "submitted"
+        p.script_text = None
         trace_id = f"story-{p.id}"
         job = Job(
             type="narration",

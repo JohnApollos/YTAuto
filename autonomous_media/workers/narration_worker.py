@@ -45,18 +45,20 @@ class NarrationWorker(Worker):
             audio_filename = "narration.wav"
             local_audio_path = Path(temp_dir) / audio_filename
 
-            # In testing/development, if "piper" binary is missing or voice model path is missing,
-            # we can write a dummy/silent WAV file to avoid crashing.
+            # Sanitize text to speak (ignore stub JSON rationale strings)
+            text_to_speak = post.script_text
+            if not text_to_speak or "hook_strength" in text_to_speak or "Stub result" in text_to_speak or text_to_speak.strip().startswith("{"):
+                text_to_speak = f"{post.title}\n\n{post.body_text}"
+
             try:
                 narrate(
-                    script_text=post.script_text or post.body_text,
+                    script_text=text_to_speak,
                     voice_profile=voice_profile,
                     output_path=local_audio_path
                 )
             except Exception as e:
                 # Fallback 1: gTTS voice synthesis
                 logger.warning(f"Piper execution failed: {e}. Falling back to gTTS / pyttsx3 voice synthesis.", extra={"trace_id": job.trace_id})
-                text_to_speak = post.script_text or post.body_text or "This is an automated story narration video."
                 success_tts = False
                 try:
                     from gtts import gTTS

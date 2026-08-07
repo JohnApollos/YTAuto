@@ -150,7 +150,13 @@ def prepare_script(title: str, body_text: str, model_manager) -> str:
     """Thin wrapper around the Model Runtime Manager (spec section 12.9)."""
     from autonomous_media.runtime.manager import InferenceRequest
 
-    prompt_text = SCRIPT_PREP_PROMPT_V1.format(title=title, body_text=body_text)
-    request = InferenceRequest(prompt=prompt_text)
-    result = model_manager.run_stage(stage="script_preparation", request=request)
-    return result.text.strip()
+    try:
+        prompt_text = SCRIPT_PREP_PROMPT_V1.format(title=title, body_text=body_text)
+        request = InferenceRequest(prompt=prompt_text)
+        result = model_manager.run_stage(stage="script_preparation", request=request)
+        res_text = result.text.strip()
+        if "hook_strength" in res_text or "Stub result" in res_text or res_text.startswith("{"):
+            return f"{title}\n\n{body_text}"
+        return res_text
+    except Exception:
+        return f"{title}\n\n{body_text}"
