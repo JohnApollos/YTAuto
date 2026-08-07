@@ -198,10 +198,21 @@ class RenderingWorker(Worker):
 
             aspect_ratio = width / height
 
+            # Determine target form factor (shorts vs long-form)
+            target_format = job.payload.get("target_format", "shorts") if job.payload else "shorts"
+            
+            aud_dur = 0.0
+            if is_story and audio_path and os.path.exists(audio_path):
+                try:
+                    probe_aud = ffmpeg.probe(audio_path)
+                    aud_dur = float(probe_aud.get('format', {}).get('duration', 0.0))
+                except Exception:
+                    pass
+
             is_long_form = False
             if is_story and source_post:
-                word_count = len((source_post.body_text or "").split())
-                if word_count > 150:
+                # Only render in 16:9 landscape if explicitly requested as long_form AND audio duration > 60s
+                if target_format == "long_form" and aud_dur > 60.0:
                     is_long_form = True
 
             if not is_story:
@@ -226,15 +237,13 @@ class RenderingWorker(Worker):
                 video = video.filter('crop', f"in_w*{crop_w_norm}", "in_h", f"in_w*{crop_x_norm}", 0)
                 video = video.filter('scale', 1080, 1920)
             elif is_long_form:
-                # Long-Form Stories (>150 words): 16:9 Landscape (1920x1080)
+                # Long-Form Stories (>60s long-form format): 16:9 Landscape (1920x1080)
                 # Random inner segment from long background asset
                 import random
                 bg_ss = 0.0
                 try:
                     probe_bg = ffmpeg.probe(video_path)
-                    probe_aud = ffmpeg.probe(audio_path)
                     bg_dur = float(probe_bg.get('format', {}).get('duration', 0))
-                    aud_dur = float(probe_aud.get('format', {}).get('duration', 10.0))
                     if bg_dur > aud_dur + 10.0:
                         bg_ss = random.uniform(5.0, bg_dur - aud_dur - 5.0)
                 except Exception:
@@ -246,15 +255,14 @@ class RenderingWorker(Worker):
                 audio = stream_a.audio
                 video = video.filter('scale', 1920, 1080)
             else:
-                # Shorts Stories (<=150 words): Center crop to 9:16 Vertical (1080x1920)
+                # Shorts Stories (9:16 Vertical Portrait 1080x1920)
+                # Center crop to 9:16 Vertical (1080x1920)
                 # Random inner segment from long background asset
                 import random
                 bg_ss = 0.0
                 try:
                     probe_bg = ffmpeg.probe(video_path)
-                    probe_aud = ffmpeg.probe(audio_path)
                     bg_dur = float(probe_bg.get('format', {}).get('duration', 0))
-                    aud_dur = float(probe_aud.get('format', {}).get('duration', 10.0))
                     if bg_dur > aud_dur + 10.0:
                         bg_ss = random.uniform(5.0, bg_dur - aud_dur - 5.0)
                 except Exception:
