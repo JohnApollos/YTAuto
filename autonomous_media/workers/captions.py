@@ -52,7 +52,7 @@ class CaptionStyle:
 CAPTION_PRESETS: dict[str, CaptionStyle] = {
     "reddit_shorts": CaptionStyle(
         name="reddit_shorts",
-        font="Montserrat ExtraBold",
+        font="Arial Black",
         font_size=84,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
@@ -63,7 +63,7 @@ CAPTION_PRESETS: dict[str, CaptionStyle] = {
     ),
     "podcast_shorts": CaptionStyle(
         name="podcast_shorts",
-        font="Anton",
+        font="Impact",
         font_size=90,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
@@ -74,7 +74,7 @@ CAPTION_PRESETS: dict[str, CaptionStyle] = {
     ),
     "reddit_longform": CaptionStyle(
         name="reddit_longform",
-        font="Poppins Bold",
+        font="Arial",
         font_size=64,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
@@ -85,7 +85,7 @@ CAPTION_PRESETS: dict[str, CaptionStyle] = {
     ),
     "hormozi_bold": CaptionStyle(
         name="hormozi_bold",
-        font="Montserrat ExtraBold",
+        font="Arial Black",
         font_size=84,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
@@ -94,7 +94,7 @@ CAPTION_PRESETS: dict[str, CaptionStyle] = {
     ),
     "anton_punchy": CaptionStyle(
         name="anton_punchy",
-        font="Anton",
+        font="Impact",
         font_size=90,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
@@ -103,7 +103,7 @@ CAPTION_PRESETS: dict[str, CaptionStyle] = {
     ),
     "poppins_soft": CaptionStyle(
         name="poppins_soft",
-        font="Poppins Bold",
+        font="Arial",
         font_size=76,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
@@ -112,7 +112,7 @@ CAPTION_PRESETS: dict[str, CaptionStyle] = {
     ),
     "default": CaptionStyle(
         name="default",
-        font="Montserrat ExtraBold",
+        font="Arial Black",
         font_size=84,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
