@@ -13,6 +13,42 @@ Next milestone.
 
 ---
 
+## [1.6.0] — Automated Story Synthesis, Voice Engines & UX Overhaul — 2026-08-07
+
+Delivers major reliability fixes, multi-tier voice synthesis, 9:16 vertical portrait mode for Reddit Shorts, automatic orphan job recovery on boot, and comprehensive operator dashboard UX enhancements.
+
+### Added — Multi-Tier Voice Synthesis & Automated Piper Installer
+- **Piper ONNX Neural Voice Engine**: `autonomous_media/workers/narration.py` updated to run Piper local ONNX neural voice models (`en_US-lessac-high`, `en_US-ryan-high`, `en_US-amy-medium`). Added absolute path resolution and process working directory configuration.
+- **Automated Piper Installer**: `scripts/download_piper.py` — automated Python script that downloads `piper.exe` binary and high-fidelity ONNX neural voice models into `models/piper/`.
+- **Multi-Tier Voice Fallbacks**: `autonomous_media/workers/narration_worker.py` updated with fallback hierarchy (`Piper ONNX` $\rightarrow$ `gTTS` Google DeepMind Neural TTS $\rightarrow$ `pyttsx3` Windows SAPI5 offline). Added emergency audio file existence guarantee before MinIO upload.
+
+### Added — Startup Orphan Recovery & Scheduler Stability
+- **`_recover_orphaned_running_jobs()`**: `autonomous_media/scheduler/scheduler.py` automatically detects and resets orphaned `running` jobs from previous process crashes/shutdowns back to `queued` on boot in 0 seconds flat.
+- **Reduced Heartbeat Timeout**: Reduced `HEARTBEAT_TIMEOUT_S` from 15 minutes (900s) to 90s for rapid dead-worker recovery.
+- **Flush Endpoint & UI**: Added `POST /system/jobs/flush-stuck` endpoint to `autonomous_media/api/system.py` and a **"Flush Stuck Jobs"** UI button to the Job Queue dashboard.
+
+### Fixed — 9:16 Vertical Portrait Mode & Rendering Logic
+- **Vertical Shorts Enforcement**: Updated `RenderingWorker` in `autonomous_media/workers/rendering.py` so all Reddit Shorts ($\le 60\text{s}$ or queued as `shorts`) are strictly center-cropped and rendered in **9:16 Vertical Portrait format (1080x1920)** instead of 16:9 landscape.
+- **Random Inner Segment Probing**: `RenderingWorker` probes background video duration and calculates random start timestamps (`ss=bg_ss`), ensuring different story clips utilize different inner segments of long background assets.
+- **Subtitles Alignment**: Aligned `.ass` caption positioning with vertical 1080x1920 portrait canvas.
+
+### Fixed — Script Text Sanitization & Database Constraints
+- **Script Text Guard**: Fixed LLM fallback issue where `prepare_script()` in `narration.py` and `NarrationWorker` in `narration_worker.py` fell back to `StubModelRuntime` rationale text (`hook_strength`, `stub result`). Added sanitization guards so voice synthesis always reads actual Reddit story title and body text word-for-word.
+- **Story Re-Queue Reset**: Updated `POST /curated-stories/re-queue-all` in `autonomous_media/api/curated_stories.py` to reset stale `script_text` to `None` on story re-generation.
+- **Clip `channel_id` Resolution**: Fixed `EditingWorker` (`editing.py`) channel resolution when creating `Clip` database rows, preventing PostgreSQL NOT NULL constraint violations.
+
+### Added — Frontend Dashboard UX Enhancements (`frontend/src/App.tsx`)
+- **Quality Gate Review Video Player**: Embedded interactive `<video>` players on Quality Gate Review cards (`http://localhost:5173`), allowing operators to preview rendered video, listen to narration audio, and verify subtitles before approving/rejecting clips.
+- **Exported Assets Library Controls**: Added real-time clip search bar, sorting selector by date (newest/oldest first) and duration (longest/shortest first), category filter (Podcast Clips vs Reddit Stories), and export date timestamps.
+- **Re-Export Sync Button**: Added **"Sync / Re-export All Files to Folder"** button with unique filename generation (`_<clip_id[:8]>`).
+- **1-Click Story Re-Generation**: Added **"Re-generate & Render All Stories (gTTS Voice)"** button in Curated Stories tab.
+
+### Changed — Dependencies & Repository Optimization
+- `requirements.txt`: Added `gTTS>=2.5.0`, `pyttsx3>=2.99`, and `pypiwin32>=223`.
+- `.gitignore`: Excluded `models/piper/` large binary models and `exports/` directory from git tracking to comply with GitHub repository size limits.
+
+---
+
 ## [1.5.0] — Spec v1.5 Upgrade — 2026-08-04
 
 Implements all new features from Technical Specification v1.5 excluding §29 (licensing/trust model, deferred). Zero breaking changes to the existing podcast-clipping pipeline.
