@@ -17,9 +17,10 @@ from autonomous_media.exceptions import StageUnrecoverableError, RightsBlockedEr
 
 logger = get_logger("workers.publishing")
 
-def sanitize_filename(name: str) -> str:
-    """Sanitize string for Windows and Unix file/directory name compatibility."""
-    return re.sub(r'[\\/*?:"<>|]', "_", name).strip()
+def sanitize_filename(name: str, max_length: int = 45) -> str:
+    """Sanitize string for Windows and Unix file/directory name compatibility and cap length to avoid MAX_PATH crashes."""
+    sanitized = re.sub(r'[\\/*?:"<>|]', "_", name).strip()
+    return sanitized[:max_length].strip()
 
 class PublishingWorker(Worker):
     job_type = 'publishing'
