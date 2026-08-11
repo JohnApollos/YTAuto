@@ -149,6 +149,9 @@ class TelegramNotifierService:
         Public entry point called by logger emit_event().
         Non-blocking: pushes event into internal processing queue.
         """
+        if not self.is_configured():
+            return
+
         severity, category = PolicyEngine.classify_event(event_type, payload)
         event = AlertEvent(
             event_type=event_type,
