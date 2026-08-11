@@ -6,21 +6,31 @@ import { CheckCircle, XCircle, ChevronLeft, ChevronRight, ShieldCheck } from 'lu
 
 interface QualityGateViewProps {
   reviewClips: Clip[];
+  publishedClips?: Clip[];
   onRefreshClips: () => void;
   showToast: (text: string, type?: 'success' | 'danger' | 'warning' | 'info') => void;
 }
 
 export const QualityGateView: React.FC<QualityGateViewProps> = ({
   reviewClips,
+  publishedClips = [],
   onRefreshClips,
   showToast
 }) => {
+  const [viewMode, setViewMode] = useState<'pending' | 'published'>('pending');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('Bad Subtitle Wrapping');
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const activeClip = reviewClips[currentIndex] || null;
+  const activeClips = viewMode === 'pending' ? reviewClips : publishedClips;
+  const activeClip = activeClips[currentIndex] || null;
+
+  // Reset index when changing view mode
+  const handleTabChange = (mode: 'pending' | 'published') => {
+    setViewMode(mode);
+    setCurrentIndex(0);
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -85,21 +95,6 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
     }
   };
 
-  if (reviewClips.length === 0) {
-    return (
-      <div>
-        <h1 className="section-title"><CheckCircle /> Quality Gate Workbench</h1>
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '60px 24px' }}>
-          <ShieldCheck size={48} style={{ color: 'var(--success)', marginBottom: '16px' }} />
-          <h3>All Rendered Videos Approved!</h3>
-          <p className="text-muted" style={{ maxWidth: '500px', margin: '8px auto 0 auto' }}>
-            No clips are currently waiting in the human quality gate review queue. New videos will appear here automatically when rendering completes.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -107,31 +102,65 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
           <h1 className="section-title" style={{ margin: 0 }}>
             <CheckCircle /> Quality Gate Review Workbench
           </h1>
-          <p className="text-muted" style={{ margin: '4px 0 0 0' }}>
-            Review item <strong>{currentIndex + 1} of {reviewClips.length}</strong> ready for final human approval before publishing.
-          </p>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+            <button
+              onClick={() => handleTabChange('pending')}
+              className={`btn btn-sm ${viewMode === 'pending' ? 'btn-primary' : 'btn-outline'}`}
+            >
+              Pending Review ({reviewClips.length})
+            </button>
+            <button
+              onClick={() => handleTabChange('published')}
+              className={`btn btn-sm ${viewMode === 'published' ? 'btn-primary' : 'btn-outline'}`}
+            >
+              Published & Exported ({publishedClips.length})
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button 
-            disabled={currentIndex === 0} 
-            onClick={() => setCurrentIndex(prev => prev - 1)} 
-            className="btn btn-outline btn-sm"
-          >
-            <ChevronLeft size={16} /> Prev (🠔)
-          </button>
-          <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{currentIndex + 1} / {reviewClips.length}</span>
-          <button 
-            disabled={currentIndex === reviewClips.length - 1} 
-            onClick={() => setCurrentIndex(prev => prev + 1)} 
-            className="btn btn-outline btn-sm"
-          >
-            Next (➔) <ChevronRight size={16} />
-          </button>
-        </div>
+        {activeClips.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button 
+              disabled={currentIndex === 0} 
+              onClick={() => setCurrentIndex(prev => prev - 1)} 
+              className="btn btn-outline btn-sm"
+            >
+              <ChevronLeft size={16} /> Prev (🠔)
+            </button>
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{currentIndex + 1} / {activeClips.length}</span>
+            <button 
+              disabled={currentIndex === activeClips.length - 1} 
+              onClick={() => setCurrentIndex(prev => prev + 1)} 
+              className="btn btn-outline btn-sm"
+            >
+              Next (➔) <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '32px', alignItems: 'start' }}>
+      {activeClips.length === 0 ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '60px 24px' }}>
+          <ShieldCheck size={48} style={{ color: 'var(--success)', marginBottom: '16px' }} />
+          <h3>{viewMode === 'pending' ? 'All Rendered Videos Approved!' : 'No Published Clips Yet'}</h3>
+          <p className="text-muted" style={{ maxWidth: '500px', margin: '8px auto 0 auto' }}>
+            {viewMode === 'pending'
+              ? 'No clips are currently waiting in the human quality gate review queue. Switch to Published & Exported tab to view completed videos.'
+              : 'Clips that pass quality gate and complete publishing will appear here.'}
+          </p>
+          {viewMode === 'pending' && publishedClips.length > 0 && (
+            <button
+              onClick={() => handleTabChange('published')}
+              className="btn btn-primary btn-sm"
+              style={{ marginTop: '16px' }}
+            >
+              View {publishedClips.length} Published Videos
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '32px', alignItems: 'start' }}>
         
         <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{
@@ -256,7 +285,8 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
           </div>
         </div>
       </Modal>
-
-    </div>
+    </>
+  )}
+</div>
   );
 };

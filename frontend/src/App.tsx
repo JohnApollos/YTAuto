@@ -180,6 +180,7 @@ export function App() {
         {currentRoute === 'review' && (
           <QualityGateView
             reviewClips={reviewClips}
+            publishedClips={publishedClips}
             onRefreshClips={refreshAll}
             showToast={showToast}
           />
