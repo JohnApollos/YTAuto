@@ -110,7 +110,7 @@ echo.
 :: ---------------------------------------------------------------
 :: Step 8: Start API Server + Scheduler
 :: ---------------------------------------------------------------
-echo [8/8] Starting API Server & Main Scheduler...
+echo [8/8] Starting API Server and Main Scheduler...
 start "Autonomous Media - API" /MIN cmd /k "cd /d %~dp0 && .venv\Scripts\python.exe -m uvicorn autonomous_media.api.main:app --host 0.0.0.0 --port 8000"
 start "Autonomous Media - Scheduler" /MIN cmd /k "cd /d %~dp0 && .venv\Scripts\python.exe -m autonomous_media.main"
 echo.
