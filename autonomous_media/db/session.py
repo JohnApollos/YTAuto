@@ -14,6 +14,18 @@ SessionLocal = sessionmaker(
     expire_on_commit=False,
 )
 
+def init_db():
+    """Ensure all SQLAlchemy tables exist in Postgres DB."""
+    try:
+        from autonomous_media.db.base import Base
+        import autonomous_media.db.models  # noqa
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"init_db warning: {e}")
+
+# Auto-initialize database tables on import
+init_db()
+
 def get_db():
     """FastAPI dependency — yields a session and closes on exit."""
     with SessionLocal() as session:

@@ -164,6 +164,9 @@ class TelegramNotifierService:
         except queue.Full:
             logger.warning(f"Telegram notification queue full! Dropped event {event_type}")
 
+    # Backward-compatible alias for logger.emit_event()
+    notify_event = process_event
+
     def _delivery_loop(self):
         while self._running:
             try:

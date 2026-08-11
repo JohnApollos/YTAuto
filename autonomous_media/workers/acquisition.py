@@ -107,6 +107,11 @@ class AcquisitionWorker(Worker):
                     'quiet': True,
                     'no_warnings': True,
                     'merge_output_format': 'mp4',
+                    'socket_timeout': 30,
+                    'retries': 10,
+                    'fragment_retries': 10,
+                    'extractor_retries': 5,
+                    'concurrent_fragment_downloads': 4,
                 }
                 if os.path.exists(cookies_path):
                     ydl_opts['cookiefile'] = cookies_path
