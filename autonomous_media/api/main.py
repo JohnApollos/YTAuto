@@ -61,5 +61,7 @@ if _DIST.exists():
     @app.get("/", include_in_schema=False)
     @app.get("/{full_path:path}", include_in_schema=False)
     async def _spa(full_path: str = ""):
-        # Any path not matched by the API returns index.html (SPA routing)
+        if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"API route '/{full_path}' not found")
         return FileResponse(str(_DIST / "index.html"))

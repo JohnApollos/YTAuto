@@ -14,14 +14,20 @@ SessionLocal = sessionmaker(
     expire_on_commit=False,
 )
 
+_db_initialized = False
+
 def init_db():
-    """Ensure all SQLAlchemy tables exist in Postgres DB."""
+    """Ensure all SQLAlchemy tables exist in Postgres DB safely and idempotently."""
+    global _db_initialized
+    if _db_initialized:
+        return
     try:
         from autonomous_media.db.base import Base
         import autonomous_media.db.models  # noqa
-        Base.metadata.create_all(bind=engine)
-    except Exception as e:
-        print(f"init_db warning: {e}")
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+        _db_initialized = True
+    except Exception:
+        pass
 
 # Auto-initialize database tables on import
 init_db()

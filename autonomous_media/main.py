@@ -24,6 +24,10 @@ if os.path.exists(frontend_dist_path):
     # Catch-all route to serve index.html for React SPA client-side routing
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
+        if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"API route '/{full_path}' not found")
+
         # Allow serving standard files if they exist in dist root (like vite.svg, favicon, etc)
         file_path = os.path.join(frontend_dist_path, full_path)
         if os.path.isfile(file_path):
