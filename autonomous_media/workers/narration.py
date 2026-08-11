@@ -155,6 +155,9 @@ def normalize_spoken_script(text: str) -> str:
     text = re.sub(r'\b(\d+)\s*lbs?\b', r'\1 pounds', text, flags=re.IGNORECASE)
     text = re.sub(r'\b(\d+)\s*ft\b', r'\1 feet', text, flags=re.IGNORECASE)
 
+    # Strip emojis and non-verbal unicode symbols
+    text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
+
     # Punctuation & prosody polish
     text = text.replace('...', ', ').replace('  ', ' ')
     text = re.sub(r'\?{2,}', '?', text)
@@ -247,6 +250,8 @@ def narrate(
         input=script_text,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         cwd=piper_dir if os.path.exists(piper_dir) else None
     )
     if result.returncode != 0:
