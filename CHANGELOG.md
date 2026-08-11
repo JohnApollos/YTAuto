@@ -7,9 +7,28 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
-## [Unreleased]
+## [1.7.0] — Telegram Remote Operations & Next-Gen Frontend Control Center — 2026-08-11
 
-Next milestone.
+Delivers a production-grade Telegram remote operations and alerting subsystem, refactors the frontend into a modular React 19 SPA with URL hash routing, adds Quality Gate keyboard shortcuts, and achieves 100% test suite verification (43/43 unit tests passing).
+
+### Added — Production-Grade Telegram Alert & Remote Operations Subsystem
+- **Centralized Notification Engine (`autonomous_media/services/telegram/`)**: Modular subpackage containing `models.py`, `client.py`, `formatter.py`, `policies.py`, `deduplication.py`, `commands.py`, and `notifier.py`.
+- **5-Level Severity Model**: Categorizes alerts into `INFO`, `SUCCESS`, `WARNING`, `ERROR`, and `CRITICAL`.
+- **Deduplication & Failure Aggregation**: 300-second fingerprint window (`event_type:stage:entity_id:error_hash`) suppresses identical alerts. Aggregates 5+ failures within 10 minutes into a correlated `🚨 PIPELINE INCIDENT DETECTED` card, and emits `🟢 SYSTEM RECOVERED` upon resolution.
+- **Telegram Bot Remote Commands**: Dispatcher supporting `/status`, `/jobs`, `/failed`, `/review`, `/quota`, `/health`, and `/help` with Chat ID allowlist authorization (`allowed_chat_ids`).
+- **HTML & MarkdownV2 Escaping**: Robust `escape_html()` and `escape_markdown_v2()` functions preventing broken markup when processing raw user input or stack traces.
+- **Non-Blocking Delivery Queue**: Async background queue (`telegram_notifier_queue`) ensuring Telegram API timeouts or failures never block pipeline workers.
+- **Database Persistence**: Added `TelegramConfig` and `TelegramDeliveryLog` models to `autonomous_media/db/models.py`.
+
+### Added — Next-Gen Modular Control Center Frontend (`frontend/src/`)
+- **Modular Directory Architecture**: Refactored monolithic `App.tsx` into modular feature directories (`types/`, `services/`, `hooks/`, `components/`, `features/`).
+- **URL Hash Client Router**: Implemented hash-based navigation (`#/overview`, `#/stories`, `#/jobs`, `#/review`, `#/assets`, `#/backgrounds`, `#/sources`, `#/rights`, `#/settings`) preserving view state across browser refreshes.
+- **Quality Gate Workbench**: Keyboard-driven reviewer (`Space` for play/pause, `A` for approve, `R` for reject, `ArrowRight`/`ArrowLeft` for card navigation).
+- **Settings & Telegram Control View (`SettingsView.tsx`)**: Real-time Telegram connection audit badge, masked token display, category toggles, Quiet Hours time picker (`23:00` - `07:00 EAT`), and delivery audit log table.
+
+### Added — Comprehensive Unit Test Suite & Documentation
+- **Telegram Unit Test Suite (`tests/unit/test_telegram_subsystem.py`)**: 8 dedicated tests covering HTML/Markdown escaping, severity classification, deduplication, incident correlation, command authorization, and card formatting. All 43 backend unit tests passing cleanly.
+- **Subsystem Specification Document (`docs/telegram-alerts.md`)**: Comprehensive guide detailing subsystem architecture, severity policies, message templates, bot commands, security rules, and troubleshooting procedures.
 
 ---
 

@@ -57,6 +57,7 @@ class Worker(ABC):
                 job.status = "dead_letter"
                 job.error = str(e)
                 session.commit()
+                emit_event("job.dead_letter", job.trace_id, {"type": job.type, "job_id": str(job.id), "error": str(e), "attempts": job.attempts, "max_attempts": job.max_attempts})
                 raise
             except QuotaExceededError as e:
                 from zoneinfo import ZoneInfo
@@ -73,12 +74,16 @@ class Worker(ABC):
                 job.status = "retrying"
                 job.error = f"QuotaExceededError: deferred until midnight Pacific. Details: {e}"
                 session.commit()
+                emit_event("quota.warning", job.trace_id, {"type": job.type, "job_id": str(job.id), "error": str(e)})
                 raise
             except Exception as e:
                 job.attempts += 1
-                job.status = "retrying" if job.attempts < job.max_attempts else "dead_letter"
+                is_dead = job.attempts >= job.max_attempts
+                job.status = "dead_letter" if is_dead else "retrying"
                 job.error = str(e)
                 session.commit()
+                evt_name = "job.dead_letter" if is_dead else "job.failed"
+                emit_event(evt_name, job.trace_id, {"type": job.type, "job_id": str(job.id), "error": str(e), "attempts": job.attempts, "max_attempts": job.max_attempts, "will_retry": not is_dead})
                 raise
             finally:
                 stop_heartbeat.set()

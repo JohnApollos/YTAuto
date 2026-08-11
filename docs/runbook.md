@@ -299,3 +299,33 @@ ORDER BY created_at DESC;
 4. Re-enqueue the publish job: `POST /api/v1/jobs/{job_id}/retry`.
 
 **Do not** set status to `fair_use_asserted` — it is not a valid status in the system. Fair use is a legal determination, not a software checkbox.
+
+---
+
+## 11. Telegram Subsystem Troubleshooting
+
+### 11.1 Telegram Alerts Not Arriving
+- **Symptom**: System events or job failures occur, but no push notification is delivered to Telegram.
+- **Check**:
+  1. Open Control Center UI at `#/settings`. Inspect Telegram status badge (`🟢 Connected`, `🟡 Degraded`, `🔴 Disconnected`).
+  2. Verify `bot_token` and `chat_id` are configured. Click **"Save & Test Connection"**.
+  3. Inspect `telegram_delivery_logs` table in `#/settings` for error details (e.g. `401 Unauthorized`, `400 Chat Not Found`).
+- **Remediation**:
+  - If `401 Unauthorized`: Verify bot token in `@BotFather`.
+  - If `400 Chat Not Found`: Ensure the bot is added to the target group or send `/start` to the bot directly in Telegram first.
+
+### 11.2 Telegram Bot Commands Not Responding
+- **Symptom**: Sending `/status` or `/jobs` in Telegram produces no response.
+- **Check**:
+  1. Inspect `telegram_delivery_logs` for `security.unauthorized_command` warnings.
+  2. Check if sender's Chat ID is in `allowed_chat_ids`.
+- **Remediation**: Add the operator's numeric Chat ID to `allowed_chat_ids` in `#/settings`.
+
+### 11.3 Alert Spam or Duplicate Notifications
+- **Symptom**: Operator receives repeated identical alerts for the same job error.
+- **Check**: Verify `DeduplicationFilter` 300s window settings in `#/settings`.
+- **Remediation**: Ensure deduplication threshold is enabled (`300s` default).
+
+### 11.4 Quiet Hours Alert Suppression
+- **Symptom**: Routine job notifications are not delivered between 23:00 and 07:00 EAT.
+- **Context**: This is expected behavior. Lower severity alerts (`INFO`, `SUCCESS`, `WARNING`, `ERROR`) are held during Quiet Hours for the Morning Summary. `CRITICAL` alerts bypass Quiet Hours automatically.

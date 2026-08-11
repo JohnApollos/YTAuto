@@ -81,33 +81,40 @@ The package layout mirrors the spec's component names directly — if you're loo
 ```
 autonomous-media/
   autonomous_media/
-    api/                       # FastAPI routers — one module per resource, spec §9.2
-      auth.py
-      channels.py
-      sources.py
-      jobs.py
-      clips.py
-      inventory.py
-      analytics.py
-      rights.py
-      system.py
-      main.py                  # app assembly, mounts every router above
+    api/                       # FastAPI routers — auth, channels, sources, jobs, clips, system, telegram
     db/
-      models.py                # SQLAlchemy models mirroring spec §8.3's core tables
-      session.py
+      models.py                # SQLAlchemy models (includes TelegramConfig & TelegramDeliveryLog)
       migrations/               # Alembic environment + versions/
     scheduler/
       scheduler.py              # spec §12.1
       queue.py                  # Redis Streams wrapper, spec §7.3
+    services/
+      telegram/                # Telegram alert & remote ops subsystem
+        models.py              # AlertSeverity, AlertCategory, AlertEvent
+        client.py              # Telegram HTTP client with exponential backoff
+        formatter.py           # HTML / MarkdownV2 escaping & card templates
+        policies.py            # Severity classification & quiet hours engine
+        deduplication.py       # 300s fingerprinting & incident correlator
+        commands.py            # Bot command dispatcher (/status, /jobs, /review)
+        notifier.py            # Singleton async queue service
     workers/
-      base.py                   # Worker base class, Chapter 4
-      acquisition.py             # spec §12.2
-      transcription.py           # spec §12.3
-      intelligence.py            # spec §12.4 / §11.1
-      vision.py                  # spec §12.5
-      editing.py                 # spec §12.6
-      rendering.py                # spec §12.7
-      quality_gate.py              # spec §12.8
+      base.py                  # Worker base class with heartbeat & event emission
+      acquisition.py           # spec §12.2
+      transcription.py         # spec §12.3
+      intelligence.py          # spec §12.4 / §11.1
+      vision.py                # spec §12.5
+      editing.py               # spec §12.6
+      rendering.py             # spec §12.7
+      quality_gate.py          # spec §12.8
+      publishing.py           # spec §12.10
+  frontend/                    # Modular React 19 + Vite 8 control center
+    src/
+      components/              # UI primitives (Badge, ToastStack)
+      features/                # Modular view features (stories, jobs, settings, etc.)
+      hooks/                   # Custom React hooks (useToast)
+      services/                # API client wrapper (api.ts)
+      types/                   # TypeScript interfaces
+```
       publishing.py                # spec §12.11
       analytics.py                  # spec §12.12
       learning.py                    # spec §11.6 / §12.9 (residual, not the model runtime)

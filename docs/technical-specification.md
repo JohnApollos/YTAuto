@@ -1379,4 +1379,34 @@ Source transcript: {candidate_text}
 
 ---
 
+## 32. Telegram Alert & Remote Operations Subsystem Specification
+
+### 32.1 Operational Architecture
+The Telegram subsystem provides real-time remote observability and command execution for YTAuto. It operates non-blocking via an asynchronous queue (`telegram_notifier_queue`) and persists configuration and audit logs in PostgreSQL (`telegram_configs`, `telegram_delivery_logs`).
+
+### 32.2 5-Level Severity Model
+- `INFO`: Routine operational events (e.g. story submitted, daily summary).
+- `SUCCESS`: Key pipeline milestones (e.g. clip ready for QC review, published).
+- `WARNING`: Approaching resource capacity (e.g. YouTube quota >70%, storage >75%).
+- `ERROR`: Background job failure or dead-letter state requiring attention.
+- `CRITICAL`: Subsystem failure (e.g. 5+ job failures in 10m, LLM server offline, DB down).
+
+### 32.3 Deduplication & Incident Correlation
+- **Fingerprinting**: `event_type + stage + entity_id + error_hash` computed for each `AlertEvent`. Identical alerts within `300 seconds` are suppressed.
+- **Incident Correlation**: Aggregates 5+ failures within a rolling 10-minute window into a single `🚨 PIPELINE INCIDENT DETECTED` alert. Emits `🟢 SYSTEM RECOVERED` when job execution resumes succeeding.
+
+### 32.4 Bot Remote Commands
+Authorized operators execute commands in Telegram:
+- `/status`: System health, active jobs, ready QC clips, and published counts.
+- `/jobs`: 5 most recent background production jobs.
+- `/failed`: Active failed or dead-lettered jobs with error summaries.
+- `/review`: Clips currently awaiting Quality Gate human review.
+- `/quota`: Daily YouTube API quota pools across Google Cloud projects.
+- `/health`: Database, Redis Queue, MinIO Storage, and Vulkan LLM health.
+- `/help`: Bot command syntax reference.
+
+Commands validate sender `chat_id` against `allowed_chat_ids`. Unauthorized attempts log a security audit event (`security.unauthorized_command`).
+
+---
+
 *End of document.*

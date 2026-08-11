@@ -857,3 +857,20 @@ Autonomous Media - System Verification
 Result: 13 passed, 0 failed
 System is ready.
 ```
+
+---
+
+## Part 12 — Dedicated Telegram Deployment Checklist
+
+Before enabling Telegram remote operations in production, complete this verification checklist:
+
+- [ ] **Bot Token Created**: Created Telegram Bot via `@BotFather` and copied secret HTTP API Token (`<TELEGRAM_BOT_TOKEN>`).
+- [ ] **Secret Management**: Token stored securely in environment or entered via control center UI (`#/settings`); never committed to Git.
+- [ ] **Chat ID Identified**: Obtained target Chat ID or Group ID (`<TELEGRAM_CHAT_ID>`) via `@userinfobot`.
+- [ ] **Allowed Chat IDs Configured**: Added authorized operator Chat IDs to `allowed_chat_ids` list for bot command security.
+- [ ] **Empirical UI Verification**: Clicked **"Save & Test Connection"** button in `#/settings` and confirmed green `🟢 Connected` badge status and instant test push notification delivery.
+- [ ] **Severity & Category Policies Configured**: Verified category toggles (`SYSTEM`, `JOBS`, `CONTENT`, `QUOTA`, `SECURITY`) and minimum severity thresholds.
+- [ ] **Quiet Hours Configured**: Verified Quiet Hours (`23:00` → `07:00 EAT`) and verified that `CRITICAL` alerts bypass Quiet Hours.
+- [ ] **Bot Command Test**: Sent `/status`, `/jobs`, and `/health` to Telegram bot and verified authorized formatted responses.
+- [ ] **Delivery Log Audit**: Audited `telegram_delivery_logs` table in control center UI (`#/settings`) to verify log row creation.
+

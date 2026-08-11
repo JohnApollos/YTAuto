@@ -3,6 +3,9 @@
 ## Executive Summary
 This document presents a comprehensive, empirical reverse-engineering map of the **YTAuto** frontend application as it exists in the codebase (`C:\dev\YTAuto\frontend`). YTAuto features a high-density, single-page operator dashboard built with **React 19**, **TypeScript 6**, **Vite 8**, and **Lucide Icons**, styled via a custom dark glassmorphism visual design system (`index.css`).
 
+> [!NOTE]
+> For a deep, product-focused evaluation of operator ergonomics, keyboard shortcuts, accessibility findings, responsive layout breakdowns, and prioritized UX backlog, see [Product UI/UX Audit & Operator Experience Specification](frontend-ux-audit.md).
+
 The frontend serves as the control center for an autonomous AI video production engine, giving single operators full command over Reddit story submission, YouTube channel source ingestion, job queue monitoring, quality gate review, background video asset management, rights compliance, and real-time Telegram push alert configuration.
 
 ---

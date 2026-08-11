@@ -86,37 +86,137 @@ from fastapi import HTTPException
 class TelegramConfigRequest(BaseModel):
     bot_token: str
     chat_id: str
+    allowed_chat_ids: Optional[list[str]] = None
+
+
+class TelegramPreferencesRequest(BaseModel):
+    enabled_categories: Optional[dict[str, bool]] = None
+    min_severity: Optional[dict[str, str]] = None
+    quiet_hours_enabled: Optional[bool] = None
+    quiet_hours_start: Optional[str] = None
+    quiet_hours_end: Optional[str] = None
+    timezone: Optional[str] = None
+    dedupe_window_seconds: Optional[int] = None
+    quota_warning_threshold: Optional[int] = None
+    quota_critical_threshold: Optional[int] = None
 
 
 @router.get("/telegram")
-def get_telegram_config():
-    from autonomous_media.services.telegram_bot import telegram_notifier
+def get_telegram_config(db: Session = Depends(get_db)):
+    from autonomous_media.services.telegram import telegram_notifier
+    token = telegram_notifier.bot_token
+    masked_token = f"{token[:6]}...{token[-4:]}" if token and len(token) > 10 else None
+    
     return {
         "configured": telegram_notifier.is_configured(),
-        "bot_token_set": bool(telegram_notifier.bot_token),
-        "chat_id_set": bool(telegram_notifier.chat_id),
-        "chat_id": telegram_notifier.chat_id if telegram_notifier.chat_id else None,
+        "connection_status": telegram_notifier.get_connection_status(),
+        "bot_token_masked": masked_token,
+        "chat_id": telegram_notifier.chat_id,
+        "allowed_chat_ids": telegram_notifier.allowed_chat_ids,
+        "preferences": {
+            "enabled_categories": telegram_notifier.preferences.enabled_categories,
+            "min_severity": telegram_notifier.preferences.min_severity
+        },
+        "quiet_hours": {
+            "enabled": telegram_notifier.quiet_hours_enabled,
+            "start": telegram_notifier.quiet_hours_start,
+            "end": telegram_notifier.quiet_hours_end,
+            "timezone": telegram_notifier.timezone
+        },
+        "thresholds": {
+            "dedupe_window_seconds": telegram_notifier.dedupe_window_seconds,
+            "quota_warning_threshold": telegram_notifier.quota_warning_threshold,
+            "quota_critical_threshold": telegram_notifier.quota_critical_threshold
+        },
+        "last_successful_delivery": telegram_notifier.last_successful_delivery.isoformat() if telegram_notifier.last_successful_delivery else None
     }
 
 
 @router.post("/telegram")
 def save_telegram_config(body: TelegramConfigRequest):
-    from autonomous_media.services.telegram_bot import telegram_notifier
-    telegram_notifier.set_credentials(body.bot_token, body.chat_id)
+    from autonomous_media.services.telegram import telegram_notifier
+    telegram_notifier.set_credentials(body.bot_token, body.chat_id, body.allowed_chat_ids)
     return {
         "status": "success",
-        "configured": telegram_notifier.is_configured()
+        "configured": telegram_notifier.is_configured(),
+        "connection_status": telegram_notifier.get_connection_status()
     }
+
+
+@router.post("/telegram/preferences")
+def save_telegram_preferences(body: TelegramPreferencesRequest, db: Session = Depends(get_db)):
+    from autonomous_media.services.telegram import telegram_notifier
+    from autonomous_media.db.models import TelegramConfig
+    
+    if body.enabled_categories is not None:
+        telegram_notifier.preferences.enabled_categories.update(body.enabled_categories)
+    if body.min_severity is not None:
+        telegram_notifier.preferences.min_severity.update(body.min_severity)
+    if body.quiet_hours_enabled is not None:
+        telegram_notifier.quiet_hours_enabled = body.quiet_hours_enabled
+    if body.quiet_hours_start is not None:
+        telegram_notifier.quiet_hours_start = body.quiet_hours_start
+    if body.quiet_hours_end is not None:
+        telegram_notifier.quiet_hours_end = body.quiet_hours_end
+    if body.timezone is not None:
+        telegram_notifier.timezone = body.timezone
+    if body.dedupe_window_seconds is not None:
+        telegram_notifier.dedupe_window_seconds = body.dedupe_window_seconds
+        telegram_notifier.dedupe_filter.window_seconds = body.dedupe_window_seconds
+    if body.quota_warning_threshold is not None:
+        telegram_notifier.quota_warning_threshold = body.quota_warning_threshold
+    if body.quota_critical_threshold is not None:
+        telegram_notifier.quota_critical_threshold = body.quota_critical_threshold
+
+    # Persist to DB
+    cfg = db.query(TelegramConfig).first()
+    if not cfg:
+        cfg = TelegramConfig()
+        db.add(cfg)
+    cfg.categories = {
+        "enabled_categories": telegram_notifier.preferences.enabled_categories,
+        "min_severity": telegram_notifier.preferences.min_severity
+    }
+    cfg.quiet_hours_enabled = telegram_notifier.quiet_hours_enabled
+    cfg.quiet_hours_start = telegram_notifier.quiet_hours_start
+    cfg.quiet_hours_end = telegram_notifier.quiet_hours_end
+    cfg.timezone = telegram_notifier.timezone
+    cfg.dedupe_window_seconds = telegram_notifier.dedupe_window_seconds
+    cfg.quota_warning_threshold = telegram_notifier.quota_warning_threshold
+    cfg.quota_critical_threshold = telegram_notifier.quota_critical_threshold
+    db.commit()
+
+    return {"status": "success", "message": "Telegram preferences saved"}
 
 
 @router.post("/telegram/test")
 def test_telegram_notification(body: TelegramConfigRequest):
-    from autonomous_media.services.telegram_bot import telegram_notifier
-    telegram_notifier.set_credentials(body.bot_token, body.chat_id)
-    success = telegram_notifier.send_message(
-        "🚀 <b>YTAuto Telegram Notification Test!</b>\n\nYour Telegram Bot is connected and ready to notify you of all system jobs & video renders!"
-    )
-    return {"status": "sent", "success": success}
+    from autonomous_media.services.telegram import telegram_notifier
+    success, message = telegram_notifier.send_test_notification(body.bot_token, body.chat_id)
+    if not success:
+        raise HTTPException(status_code=400, detail=f"Telegram test failed: {message}")
+    return {"status": "sent", "success": True, "message": message}
+
+
+@router.get("/telegram/logs")
+def get_telegram_delivery_logs(limit: int = 20, db: Session = Depends(get_db)):
+    from autonomous_media.db.models import TelegramDeliveryLog
+    logs = db.query(TelegramDeliveryLog).order_by(TelegramDeliveryLog.created_at.desc()).limit(limit).all()
+    return {
+        "logs": [
+            {
+                "id": str(l.id),
+                "notification_id": l.notification_id,
+                "event_type": l.event_type,
+                "severity": l.severity,
+                "status": l.status,
+                "error": l.error,
+                "sent_at": l.sent_at.isoformat() if l.sent_at else None,
+                "created_at": l.created_at.isoformat() if l.created_at else None
+            }
+            for l in logs
+        ]
+    }
 
 
 @router.post("/re-export")

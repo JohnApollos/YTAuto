@@ -254,3 +254,40 @@ class User(Base):
     channel_scope: Mapped[list | None] = mapped_column(JSON, nullable=True)  # list of channel_ids, null = all channels
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class TelegramConfig(Base):
+    """Persistent storage for Telegram bot configuration, preferences, quiet hours, and thresholds."""
+    __tablename__ = "telegram_configs"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    bot_token: Mapped[str | None] = mapped_column(String, nullable=True)
+    chat_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    allowed_chat_ids: Mapped[list] = mapped_column(JSON, default=list)
+    categories: Mapped[dict] = mapped_column(JSON, default=dict)
+    quiet_hours_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    quiet_hours_start: Mapped[str] = mapped_column(String, default="23:00")
+    quiet_hours_end: Mapped[str] = mapped_column(String, default="07:00")
+    timezone: Mapped[str] = mapped_column(String, default="Africa/Nairobi")
+    dedupe_window_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    quota_warning_threshold: Mapped[int] = mapped_column(Integer, default=70)
+    quota_critical_threshold: Mapped[int] = mapped_column(Integer, default=90)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class TelegramDeliveryLog(Base):
+    """Persistent audit log of Telegram message deliveries and attempt results."""
+    __tablename__ = "telegram_delivery_logs"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    notification_id: Mapped[str] = mapped_column(String, index=True)
+    event_type: Mapped[str] = mapped_column(String)
+    severity: Mapped[str] = mapped_column(String, default="INFO")
+    dedupe_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, default="queued")  # queued | sent | failed | suppressed_dedupe | suppressed_quiet_hours
+    telegram_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chat_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
