@@ -4,6 +4,7 @@ import tempfile
 import uuid
 import re
 import shutil
+from pathlib import Path
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from autonomous_media.workers.base import Worker, JobResult
@@ -55,8 +56,9 @@ class PublishingWorker(Worker):
         video_description = ""
         export_subdir = ""
 
-        # Make sure target export folder exists
-        export_root = os.path.join(os.getcwd(), "exports")
+        # Make sure target export folder exists deterministically relative to repository root
+        project_root = Path(__file__).resolve().parents[2]
+        export_root = os.path.join(project_root, "exports")
         os.makedirs(export_root, exist_ok=True)
 
         if not is_story:
@@ -102,7 +104,11 @@ class PublishingWorker(Worker):
                 recent_titles_str = ", ".join(channel.branding.get("recent_titles", ["Awesome short clip"]))
                 title_prompt = title_template.replace("{recent_titles}", recent_titles_str).replace("{candidate_text}", candidate_text)
                 title_res = stage_manager.run_stage("title", InferenceRequest(prompt=title_prompt))
-                video_title = title_res.text.strip().replace('"', '')[:95]
+                raw_t = title_res.text.strip().replace('"', '')
+                if raw_t.startswith("{") or "hook_strength" in raw_t:
+                    video_title = f"Clip from: {source_video.title or 'Podcast'}"
+                else:
+                    video_title = raw_t[:95]
             except Exception as e:
                 video_title = f"Clip from: {source_video.title or 'Podcast'}"
 
@@ -113,9 +119,9 @@ class PublishingWorker(Worker):
                     desc_template = f.read()
                 desc_prompt = desc_template.replace("{candidate_text}", candidate_text)
                 desc_res = stage_manager.run_stage("description", InferenceRequest(prompt=desc_prompt))
-                desc_data = json.loads(desc_res.text)
-                desc_text = desc_data.get("description", "An amazing short clip.")
-                hashtags = " ".join(desc_data.get("hashtags", ["#shorts", "#podcast"]))
+                desc_data = json.loads(desc_res.text) if desc_res.text.strip().startswith("{") else {}
+                desc_text = desc_data.get("description", "An amazing short clip.") if isinstance(desc_data, dict) else "An amazing short clip."
+                hashtags = " ".join(desc_data.get("hashtags", ["#shorts", "#podcast"])) if isinstance(desc_data, dict) else "#shorts #podcast"
                 video_description = f"{desc_text}\n\n{hashtags}"
             except Exception as e:
                 video_description = f"Clip extracted from {source_video.url or 'original video'}\n#shorts #podcast"
@@ -132,11 +138,9 @@ class PublishingWorker(Worker):
             video_title = source_post.title
             video_description = source_post.body_text
 
-            transcript = session.query(Transcript).filter(Transcript.source_post_id == source_post.id).first()
-            word_count = transcript.word_count if transcript else 0
-
-            # Classification by word count
-            if word_count > 150:
+            # Classification by actual clip duration in seconds (<=60s is Short, >60s is Long-Form)
+            clip_dur = clip.duration_s if clip.duration_s else 0
+            if clip_dur > 60:
                 export_subdir = os.path.join(export_root, "reddit_videos", "long_form")
             else:
                 export_subdir = os.path.join(export_root, "reddit_videos", "shorts")

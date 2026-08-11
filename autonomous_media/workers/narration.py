@@ -44,28 +44,109 @@ VOICE_MODEL_PATHS: dict[str, str] = {
 DEFAULT_VOICE = "narrator_neutral_v1"
 
 
+def is_contaminated_script(text: str | None) -> bool:
+    """Checks whether text contains LLM metadata, JSON, or internal scoring leakage."""
+    if not text or not text.strip():
+        return True
+
+    stripped = text.strip()
+    # Check JSON structure or markdown codeblock wrapper
+    if stripped.startswith("{") or stripped.startswith("[") or "```json" in stripped or "```" in stripped:
+        return True
+
+    # Key metadata leakage indicators from LLM stages
+    metadata_keys = [
+        "hook_strength", "emotional_intensity", "curiosity_gap", "humor",
+        "educational_value", "story_completeness", "rationale", "promotional_ids",
+        "candidates_scored_count", "Stub result", "SYSTEM:", "USER:",
+        "Here is the prepared script", "Here is a script", "Title:", "Body:"
+    ]
+    lowered = stripped.lower()
+    for key in metadata_keys:
+        if key.lower() in lowered:
+            return True
+
+    return False
+
+
+def validate_and_clean_narration_script(text: str | None, fallback_title: str, fallback_body: str) -> str:
+    """Strictly validates narration script text.
+    If text is missing or contaminated with LLM metadata/JSON/chat,
+    safely falls back to clean, normalized title + body prose.
+    """
+    if is_contaminated_script(text):
+        clean_title = fallback_title.strip() if fallback_title else ""
+        clean_body = fallback_body.strip() if fallback_body else ""
+        text = f"{clean_title}.\n\n{clean_body}" if clean_title else clean_body
+
+    # Clean residual markdown headers & code blocks
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    return text.strip()
+
+
 def normalize_spoken_script(text: str) -> str:
-    """Normalizes Reddit abbreviations, age/gender tags, and units for realistic human narration."""
+    """Normalizes Reddit abbreviations, age/gender tags, currencies, and units for realistic human narration."""
     if not text:
         return text
 
-    # Common Reddit abbreviations
+    # Remove markdown links [text](url) -> text, and standalone URLs
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    text = re.sub(r'https?://\S+', '', text)
+
+    # Strip markdown bold/italic formatting (*, **, ~~, `)
+    text = re.sub(r'[*_~`]', '', text)
+
+    # Common Reddit & Relationship abbreviations
     text = re.sub(r'\bAITA\b', 'Am I the jerk', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bWIBTA\b', 'Would I be the jerk', text, flags=re.IGNORECASE)
     text = re.sub(r'\bNTA\b', 'Not the jerk', text, flags=re.IGNORECASE)
     text = re.sub(r'\bYTA\b', 'You are the jerk', text, flags=re.IGNORECASE)
     text = re.sub(r'\bESH\b', 'Everyone is wrong here', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bNAH\b', 'No jerks here', text, flags=re.IGNORECASE)
     text = re.sub(r'\bTL;?DR\b', "Too long, didn't read:", text, flags=re.IGNORECASE)
-    text = re.sub(r'\bw/\b', 'with ', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bw/o\b', 'without ', text, flags=re.IGNORECASE)
+
+    # Family & relationship acronyms
+    text = re.sub(r'\bMIL\b', 'mother in law', text)
+    text = re.sub(r'\bFIL\b', 'father in law', text)
+    text = re.sub(r'\bSIL\b', 'sister in law', text)
+    text = re.sub(r'\bBIL\b', 'brother in law', text)
+    text = re.sub(r'\bDH\b', 'dear husband', text)
+    text = re.sub(r'\bDW\b', 'dear wife', text)
+    text = re.sub(r'\bSO\b', 'significant other', text)
+    text = re.sub(r'\bOP\b', 'original poster', text)
+    text = re.sub(r'\bOOP\b', 'original poster', text)
+    text = re.sub(r'\bbf\b', 'boyfriend', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bgf\b', 'girlfriend', text, flags=re.IGNORECASE)
+
+    # Internet slang & abbreviations
     text = re.sub(r'\bimo\b', 'in my opinion', text, flags=re.IGNORECASE)
     text = re.sub(r'\bimho\b', 'in my honest opinion', text, flags=re.IGNORECASE)
+    text = re.sub(r'\btbh\b', 'to be honest', text, flags=re.IGNORECASE)
+    text = re.sub(r'\btbf\b', 'to be fair', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bidk\b', "I don't know", text, flags=re.IGNORECASE)
+    text = re.sub(r'\bbtw\b', 'by the way', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bafaik\b', 'as far as I know', text, flags=re.IGNORECASE)
     text = re.sub(r'\betc\.?\b', 'et cetera', text, flags=re.IGNORECASE)
     text = re.sub(r'\be\.?g\.?\b', 'for example', text, flags=re.IGNORECASE)
     text = re.sub(r'\bi\.?e\.?\b', 'that is', text, flags=re.IGNORECASE)
+    text = re.sub(r'\baka\b', 'also known as', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bw/\b', 'with ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bw/o\b', 'without ', text, flags=re.IGNORECASE)
 
     # Age and gender tags: e.g. 21M, 25F, (21M), [25F] -> 21 male, 25 female
     text = re.sub(r'\(?\b(\d{1,2})\s*M\b\)?', r'\1 male', text)
     text = re.sub(r'\(?\b(\d{1,2})\s*F\b\)?', r'\1 female', text)
+    text = re.sub(r'\b(\d{1,2})\s*yo\b', r'\1 year old', text, flags=re.IGNORECASE)
+
+    # Currencies & numbers
+    text = re.sub(r'\$(\d+(?:\.\d+)?)\s*k\b', r'\1 thousand dollars', text, flags=re.IGNORECASE)
+    text = re.sub(r'\$(\d+(?:\.\d+)?)\s*m\b', r'\1 million dollars', text, flags=re.IGNORECASE)
+    text = re.sub(r'\$(\d+(?:\.\d+)?)', r'\1 dollars', text)
+    text = re.sub(r'\b(\d+)\s*k\b', r'\1 thousand', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)\s*m\b', r'\1 million', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(\d+)%', r'\1 percent', text)
+    text = re.sub(r'#(\d+)', r'number \1', text)
 
     # Units & metrics
     text = re.sub(r'\b(\d+)\s*km\b', r'\1 kilometers', text, flags=re.IGNORECASE)
@@ -74,8 +155,10 @@ def normalize_spoken_script(text: str) -> str:
     text = re.sub(r'\b(\d+)\s*lbs?\b', r'\1 pounds', text, flags=re.IGNORECASE)
     text = re.sub(r'\b(\d+)\s*ft\b', r'\1 feet', text, flags=re.IGNORECASE)
 
-    # Clean up double spaces & punctuation formatting for natural pauses
+    # Punctuation & prosody polish
     text = text.replace('...', ', ').replace('  ', ' ')
+    text = re.sub(r'\?{2,}', '?', text)
+    text = re.sub(r'!{2,}', '!', text)
     return text.strip()
 
 

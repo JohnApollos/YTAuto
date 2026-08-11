@@ -51,11 +51,9 @@ class NarrationWorker(Worker):
             local_audio_path = Path(temp_dir) / audio_filename
 
             # Sanitize & normalize text for spoken flow (e.g. 21M -> 21 male, 10km -> 10 kilometers, AITA -> Am I the jerk)
-            text_to_speak = post.script_text
-            if not text_to_speak or "hook_strength" in text_to_speak or "Stub result" in text_to_speak or text_to_speak.strip().startswith("{"):
-                text_to_speak = f"{post.title}\n\n{post.body_text}"
-
-            text_to_speak = normalize_spoken_script(text_to_speak)
+            from autonomous_media.workers.narration import validate_and_clean_narration_script
+            validated_text = validate_and_clean_narration_script(post.script_text, post.title, post.body_text)
+            text_to_speak = normalize_spoken_script(validated_text)
 
             try:
                 narrate(

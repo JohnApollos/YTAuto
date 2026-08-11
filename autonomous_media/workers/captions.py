@@ -34,7 +34,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class CaptionStyle:
     name: str
-    font: str = "Montserrat ExtraBold"
+    font: str = "Arial Black"
     font_size: int = 84
     primary_color: str = "&H00FFFFFF"   # ASS format: &HAABBGGRR, white
     outline_color: str = "&H00000000"   # black
@@ -254,8 +254,8 @@ def render_captions(
                 raw_text = w.text.strip().upper() if style.uppercase else w.text.strip()
                 raw_text = raw_text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
                 if idx == active_idx:
-                    # Highlight active spoken word in vibrant yellow (&H0000FFFF&) with bold pop
-                    formatted_words.append(f"{{\\c&H0000FFFF&}}{raw_text}{{\\c&H00FFFFFF&}}")
+                    # Highlight active spoken word in vibrant yellow (\c&H00FFFF&) with bold pop
+                    formatted_words.append(f"{{\\c&H00FFFF&}}{raw_text}{{\\c&HFFFFFF&}}")
                 else:
                     formatted_words.append(raw_text)
 

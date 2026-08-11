@@ -14,7 +14,8 @@ An autonomous AI content production system. It continuously monitors source YouT
 | Spec v1.2 Compliance Audit (16 schema/code gaps closed) | ✅ Complete — commit `5d21b02` |
 | Phase 1 — Podcast Clipping MVP (all 10 pipeline workers implemented) | ✅ Complete — commit `391bfe1` |
 | Phase 2 — AI Model Integration, Quota System, E2E Tests | ✅ Complete — commit `391bfe1` |
-| **Spec v1.5 Upgrade** — promo filter · ASS captions · curated stories · background assets · 7-page dashboard | ✅ **Complete** — see [CHANGELOG](CHANGELOG.md) |
+| Spec v1.5 Upgrade — promo filter · ASS captions · curated stories · background assets · 7-page dashboard | ✅ Complete — see [CHANGELOG](CHANGELOG.md) |
+| **Pipeline Remediation & Codebase Ownership Audit** (all 10 defects remediated · 35/35 unit tests passing) | ✅ **Complete** — see [ENGINEERING_REMEDIATION](docs/ENGINEERING_REMEDIATION.md) |
 
 ---
 

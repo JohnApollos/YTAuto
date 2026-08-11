@@ -32,15 +32,16 @@ class ScriptPreparationWorker(Worker):
 
         # Run LLM script preparation (with raw text fallback)
         try:
-            script_text = prepare_script(post.title, post.body_text, stage_manager)
+            raw_script = prepare_script(post.title, post.body_text, stage_manager)
         except Exception as e:
             logger.warning(
                 f"LLM script preparation failed ({e}). Using raw title and body text as narration script.",
                 extra={"trace_id": job.trace_id}
             )
-            script_text = f"{post.title}\n\n{post.body_text}"
+            raw_script = None
 
-        post.script_text = script_text
+        from autonomous_media.workers.narration import validate_and_clean_narration_script
+        post.script_text = validate_and_clean_narration_script(raw_script, post.title, post.body_text)
         post.status = "scripted"
         session.commit()
 

@@ -155,7 +155,7 @@ def test_publishing_worker_story_success(mock_open, mock_copy, mock_exists, mock
         clip_candidate_id=None,
         source_post_id=post_id,
         channel_id=channel_id,
-        duration_s=120,
+        duration_s=45,
         status="qc_passed",
         storage_key=f"clips/{clip_id}.mp4"
     )
