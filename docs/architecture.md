@@ -127,3 +127,61 @@ All **large content** (raw transcripts as timestamped JSON, rendered MP4s, audio
 | `telegram_configs` | Persistent Telegram bot token, chat_id, category policies, quiet hours |
 | `telegram_delivery_logs` | Audit trail of all sent, failed, or suppressed Telegram alerts |
 | `system_events` | Append-only audit + event log with `trace_id` |
+
+---
+
+## Hardware Observability & Stage Profiling Subsystem
+
+```mermaid
+graph LR
+    subgraph Host["Host Machine (Windows 11)"]
+        CPU["Ryzen 5 5500 (12 Threads)"]
+        RAM["16 GB System Memory"]
+        GPU["AMD Radeon RX 580 (8 GB VRAM)"]
+        DISK["Local NVMe Storage"]
+    end
+
+    subgraph Profiler["Profiling Layer"]
+        SAMPLER["HardwareTelemetrySampler"]
+        STAGE_PROF["StageProfiler (ProfileStageContext)"]
+    end
+
+    subgraph API_Layer["API & Dashboard"]
+        API["GET /api/v1/system/resources"]
+        UI["Real-Time Dashboard Gauges & Coexistence Governor"]
+    end
+
+    CPU --> SAMPLER
+    RAM --> SAMPLER
+    GPU --> SAMPLER
+    DISK --> SAMPLER
+
+    SAMPLER --> API
+    STAGE_PROF --> API
+    API --> UI
+```
+
+### Key Capabilities
+1. **Host Telemetry**: Continuous measurement of host CPU utilization %, RAM used/free headroom in GB, dedicated GPU VRAM (via Windows Performance Counters), and storage footprints.
+2. **Coexistence Governor**: Automated evaluation of available host memory emitting `optimal`, `contended`, or `critical` state to prevent concurrent workload crashes (e.g. OpenWorker).
+3. **Stage Execution Profiling**: Transparent context manager (`ProfileStageContext`) wrapped around worker `process()` calls in `base.py` recording execution latency, peak RAM/VRAM deltas, and LLM token throughput without modifying worker stage logic.
+
+---
+
+## Storage Lifecycle & Retention Engine
+
+```mermaid
+graph TD
+    A["Scheduled Ingestion & Rendering"] --> B["Finished Clip Rendered in MinIO renders/"]
+    B --> C["Raw Source Video & Audio Flush (flush_used_raw_sources)"]
+    C --> D["Drops Bulky original.mp4 from autonomous-media-raw"]
+    D --> E["7-Day TTL Asset Purge (purge_aged_assets)"]
+    E --> F["Purges >7-day clips, transcripts, and job history"]
+    E -.->|PROTECTED / EXCLUDED| G["Background Video Library (backgrounds/*)"]
+```
+
+### Storage Retention Policies
+1. **Immediate Raw Source Flush (`POST /api/v1/system/storage/flush-raw`)**: Drops completed raw source MP4s and extracted WAVs once all derived clips have finished rendering.
+2. **7-Day Aged Asset Retention (`POST /api/v1/system/storage/purge-aged?days=7`)**: Drops rendered clips, subtitles, and job logs older than 7 days from MinIO and Postgres.
+3. **Strict Background Protection**: Background video assets (`background_assets` / `backgrounds/*`) are permanently protected from automated TTL flushes.
+

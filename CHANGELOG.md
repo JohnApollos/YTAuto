@@ -7,6 +7,37 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [1.8.0] — Hardware Telemetry, Stage Profiling, Storage Lifecycle TTL & UI/UX Overhaul — 2026-08-15
+
+Delivers real-time host hardware observability (CPU, RAM, AMD Radeon RX 580 VRAM, Storage), non-intrusive runtime stage profiling, storage lifecycle TTL retention engine (purged ~20.9 GB disk space while protecting background assets), MinIO socket download retry resilience, and extensive frontend UI/UX enhancements.
+
+### Added — Hardware Resource Observability & Coexistence Governor
+- **`HardwareTelemetrySampler` (`autonomous_media/profiling/profiler.py`)**: Real-time measurement of CPU load % (Ryzen 5 5500 12-thread), System RAM (Used vs. Free headroom in GB), dedicated GPU VRAM (AMD RX 580 8GB via Windows Performance Counters), and storage footprints (`raw/`, `transcripts/`, `renders/`, `exports/`).
+- **Coexistence Safety Score**: Continuous memory evaluation emitting `optimal`, `contended`, or `critical` state to prevent concurrent workload crashes (e.g. OpenWorker).
+- **`StageProfiler` & `ProfileStageContext`**: Transparent context manager wrapped around worker `process()` calls in `base.py` recording execution latency, peak RAM/VRAM deltas, and LLM token throughput without modifying worker stage logic.
+- **REST Telemetry Route**: Exposed `GET /api/v1/system/resources` delivering combined hardware telemetry, stage averages, and rolling execution history.
+
+### Added — Storage Lifecycle Retention & Footprint TTL Engine
+- **Completed Raw Source Flush (`flush_used_raw_sources`)**: Automatically purges downloaded multi-gigabyte `original.mp4` and raw `audio.wav` files from `autonomous-media-raw` once all derived clips are rendered (~8.12 GB reclaimed).
+- **7-Day Aged Asset Purge (`purge_aged_assets`)**: Purges video clips, transcripts, and job history older than 7 days (~12.84 GB reclaimed) while **strictly preserving all Reddit background video backdrops** (`backgrounds/*` / `BackgroundAsset`).
+- **MinIO Transfer Retry Resilience**: Added 3-attempt exponential backoff retry loop to `download_file` and `upload_file` in `storage.py` preventing `IncompleteRead` socket drops during heavy concurrent disk/RAM pressure.
+- **REST Endpoints & UI Controls**: Exposed `POST /api/v1/system/storage/flush-raw` and `POST /api/v1/system/storage/purge-aged?days=7`, with interactive buttons in the Settings dashboard.
+
+### Added — Frontend Dashboard UI/UX & Quality Gate Upgrades
+- **Overview Command Center (`OverviewView.tsx`)**: Real-time animated hardware telemetry meters (CPU %, RAM GB headroom, GPU VRAM, Storage), Coexistence Safety Badge, and recent stage execution latency timeline.
+- **Sticky Viewport Sidebar (`index.css`)**: Positioned sidebar as fixed viewport element (`position: sticky; top: 0; height: 100vh; overflow-y: auto`) with custom slim glass scrollbars.
+- **Job Queue Monitor (`JobsView.tsx`)**: Live search filter, elapsed execution timer for active runs, "Retry All Failed Jobs" action, and technical JSON payload inspector modal with one-click clipboard copy.
+- **Quality Gate Workbench (`QualityGateView.tsx`)**: Resolved active clip navigation indexing bug across tabs, added multi-metric virality breakdown (Hook Strength, Curiosity Gap, Emotion, Coherence), and keyboard shortcut guide.
+- **Reddit Story Studio (`StoriesView.tsx`)**: Added Narrator Voice Profile dropdown (Ryan High, Amy Medium, Lessac High), spoken duration estimator (~140 wpm), and format classification badge (Shorts vs Long-form).
+- **Background Video Asset Pool (`BackgroundsView.tsx`)**: Added video preview modal.
+
+### Fixed — Code Quality & Test Suite Expansion
+- **Garbage Collection**: Added `gc.collect()` in `Worker.run` finally block in `base.py` to immediately reclaim memory between pipeline jobs.
+- **Thread Exception Safety**: Wrapped `touch_heartbeat` in `try/except` to prevent unhandled thread exceptions during test teardowns.
+- **Comprehensive Unit Tests (`tests/unit/test_remediation_regression.py`)**: 50/50 unit and integration tests passing cleanly.
+
+---
+
 ## [1.7.0] — Telegram Remote Operations & Next-Gen Frontend Control Center — 2026-08-11
 
 Delivers a production-grade Telegram remote operations and alerting subsystem, refactors the frontend into a modular React 19 SPA with URL hash routing, adds Quality Gate keyboard shortcuts, and achieves 100% test suite verification (43/43 unit tests passing).

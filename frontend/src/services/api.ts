@@ -78,6 +78,11 @@ export const api = {
     return handleResponse<SystemHealth>(res);
   },
 
+  async getSystemResources(): Promise<import('../types').SystemResources> {
+    const res = await fetch(`${API_BASE}/system/resources`);
+    return handleResponse<import('../types').SystemResources>(res);
+  },
+
   async getModelHealth(): Promise<Record<string, ModelHealth>> {
     const res = await fetch(`${API_BASE}/system/models`);
     const data = await handleResponse<{ models: Record<string, ModelHealth> }>(res);
@@ -163,6 +168,16 @@ export const api = {
 
   async reExportClips(): Promise<{ re_exported_clips: number }> {
     const res = await fetch(`${API_BASE}/system/re-export`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  async flushRawStorage(): Promise<{ deleted_objects: number; freed_mb: number; purged_videos: number }> {
+    const res = await fetch(`${API_BASE}/system/storage/flush-raw`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  async purgeAgedAssets(days: number = 7): Promise<{ deleted_objects: number; freed_mb: number; freed_gb: number; purged_clips: number; purged_jobs: number }> {
+    const res = await fetch(`${API_BASE}/system/storage/purge-aged?days=${days}`, { method: 'POST' });
     return handleResponse(res);
   },
 

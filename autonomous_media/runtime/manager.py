@@ -227,6 +227,7 @@ stage_manager.register("grounding", _stub)
 stage_manager.register("transcription", _stub)
 stage_manager.register("vision", _stub)
 stage_manager.register("script_preparation", _stub)
+stage_manager.register("promo_detection", _stub)
 
 # In production mode, override LLM stages with real VulkanLLMRuntime
 import os
@@ -240,5 +241,6 @@ if os.environ.get("MODEL_ENV", "production") != "test":
         stage_manager.register("description", llm_runtime, fallback=_stub)
         stage_manager.register("grounding", llm_runtime, fallback=_stub)
         stage_manager.register("script_preparation", llm_runtime, fallback=_stub)
+        stage_manager.register("promo_detection", llm_runtime, fallback=_stub)
     except Exception as e:
         logger.warning(f"Failed to register Vulkan LLM runtimes: {e}")

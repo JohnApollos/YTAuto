@@ -1,32 +1,31 @@
-# React + TypeScript + Vite
+# YTAuto Operator Control Center (Frontend)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Modular React 19 Single Page Application (SPA) with TypeScript and Vite. Provides real-time hardware telemetry, pipeline job inspection, Quality Gate video review workbench, Reddit story ingestion, background asset management, and system configuration.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Key Features
 
-## React Compiler
+- **Hash-Based URL Routing**: Fully persistent navigation across page refreshes (`#/overview`, `#/stories`, `#/jobs`, `#/review`, `#/assets`, `#/backgrounds`, `#/sources`, `#/rights`, `#/settings`).
+- **Real-Time Hardware Telemetry**: Live CPU utilization %, System RAM headroom (in GB), GPU dedicated VRAM (AMD Radeon RX 580 via Windows Performance Counters), and storage footprint gauges.
+- **Coexistence Governor**: Real-time evaluation of host memory headroom (`optimal`, `contended`, `critical`) to ensure safe multi-workload coexistence (e.g. OpenWorker).
+- **Stage Execution Profiler**: Live latency benchmarks, peak RAM/VRAM deltas, and LLM token generation speed.
+- **Quality Gate Workbench**: Keyboard-driven reviewer (`Space` for play/pause, `A` for approve, `R` for reject, `ArrowRight`/`ArrowLeft` for card navigation) with virality score breakdown (Hook Strength, Curiosity Gap, Emotional Intensity, Story Compleherence).
+- **Curated Reddit Story Studio**: Ingest text narratives with auto-formatting cleaner, narrator voice profile selector (Ryan High, Amy Medium, Lessac High), duration estimator (~140 wpm), and vertical 9:16 Shorts rendering.
+- **Sticky Viewport Sidebar**: Fixed viewport sidebar with independent scrolling and custom slim glass scrollbars.
+- **Storage Lifecycle Controls**: One-click **"🧹 Flush Used Raw Sources"** and **"🗓️ Purge 7-Day Old Assets"** (with background video protection).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the Oxlint configuration
+## Development & Build
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+```bash
+# Install dependencies
+npm install
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+# Run development server with Hot Module Replacement
+npm run dev
+
+# Build production bundle
+npm run build
 ```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.

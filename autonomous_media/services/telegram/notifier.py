@@ -6,12 +6,12 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from autonomous_media.services.telegram.models import AlertEvent, AlertSeverity, AlertCategory, NotificationPreferences, DeliveryResult
 from autonomous_media.services.telegram.client import TelegramClient
-from autonomous_media.services.telegram.formatter import TelegramFormatter
+from autonomous_media.services.telegram.formatter import TelegramFormatter, escape_html
 from autonomous_media.services.telegram.policies import PolicyEngine
 from autonomous_media.services.telegram.deduplication import DeduplicationFilter, IncidentCorrelator, compute_fingerprint
 from autonomous_media.services.telegram.commands import CommandDispatcher
 from autonomous_media.db.session import SessionLocal
-from autonomous_media.db.models import TelegramConfig, TelegramDeliveryLog
+from autonomous_media.db.models import TelegramConfig, TelegramDeliveryLog, Job
 from autonomous_media.logging import get_logger
 
 logger = get_logger("services.telegram.notifier")
@@ -342,9 +342,25 @@ class TelegramNotifierService:
 
                         if cb_data.startswith("cmd:job_retry:"):
                             job_id = cb_data.split(":")[-1]
-                            from autonomous_media.scheduler.scheduler import Scheduler
-                            # Retry job logic
-                            resp_text = f"🔄 <b>Job Retry Requested</b>\n\nJob ID <code>{escape_html(job_id)}</code> re-queued for execution."
+                            requeued_ok = False
+                            try:
+                                with SessionLocal() as session:
+                                    import uuid
+                                    j_uuid = uuid.UUID(job_id) if isinstance(job_id, str) else job_id
+                                    j = session.query(Job).filter(Job.id == j_uuid).first()
+                                    if j:
+                                        j.status = "queued"
+                                        j.attempts = 0
+                                        j.error = None
+                                        session.commit()
+                                        requeued_ok = True
+                            except Exception as e:
+                                logger.error(f"Failed to retry job {job_id} from Telegram callback: {e}")
+
+                            if requeued_ok:
+                                resp_text = f"🔄 <b>Job Retry Initiated</b>\n\nJob ID <code>{escape_html(job_id)}</code> re-queued for execution."
+                            else:
+                                resp_text = f"⚠️ <b>Job Retry Failed</b>\n\nJob ID <code>{escape_html(job_id)}</code> could not be found or updated."
                             self.client.send_message(text=resp_text, chat_id=cb_chat_id, parse_mode="HTML")
 
             except Exception as e:

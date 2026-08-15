@@ -11,7 +11,7 @@ router = APIRouter(prefix="/clips", tags=["Clips"])
 
 
 class ClipPatch(BaseModel):
-    status: str  # "ready" (approve) or "qc_failed" (reject)
+    status: str  # "ready" (approve), "qc_failed", or "rejected" (reject)
 
 
 @router.get("/")
@@ -124,19 +124,21 @@ def patch_clip(clip_id: str, body: ClipPatch, db: Session = Depends(get_db)):
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
 
-    if body.status not in {"ready", "qc_failed"}:
-        raise HTTPException(status_code=400, detail="Invalid status value. Must be 'ready' or 'qc_failed'")
+    status_val = body.status.lower()
+    if status_val not in {"ready", "qc_failed", "rejected"}:
+        raise HTTPException(status_code=400, detail="Invalid status value. Must be 'ready', 'qc_failed', or 'rejected'")
 
     # Guard: if already published, reject re-approval to prevent duplicate uploads
     if clip.status == "published":
         raise HTTPException(status_code=409, detail="Clip already published. Cannot re-approve.")
 
-    clip.status = body.status
+    effective_status = "qc_failed" if status_val in ("qc_failed", "rejected") else "ready"
+    clip.status = effective_status
     db.flush()
 
     inventory_item = db.query(InventoryItem).filter(InventoryItem.clip_id == clip.id).first()
 
-    if body.status == "ready":
+    if effective_status == "ready":
         if inventory_item:
             # Guard: if the inventory item is already published, do nothing
             if inventory_item.status == "published":

@@ -28,6 +28,7 @@ export function App() {
     reviewClips,
     publishedClips,
     health,
+    resources,
     models,
     quotas,
     loading: realtimeLoading,
@@ -147,6 +148,7 @@ export function App() {
         {currentRoute === 'overview' && (
           <OverviewView
             health={health}
+            resources={resources}
             models={models}
             quotas={quotas}
             jobs={jobs}

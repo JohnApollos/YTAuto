@@ -15,3 +15,6 @@ class QuotaExceededError(AutonomousMediaError):
 
 class RightsBlockedError(AutonomousMediaError):
     pass
+
+class UnknownVoiceProfileError(AutonomousMediaError):
+    pass

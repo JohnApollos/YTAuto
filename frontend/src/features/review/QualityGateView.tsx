@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { Clip } from '../../types';
 import { api, API_BASE } from '../../services/api';
 import { Modal } from '../../components/ui/Modal';
-import { CheckCircle, XCircle, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react';
+import { CheckCircle, XCircle, ChevronLeft, ChevronRight, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface QualityGateViewProps {
   reviewClips: Clip[];
@@ -49,13 +49,13 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
         }
       } else if (e.key === 'a' || e.key === 'A' || e.key === 'Enter') {
         e.preventDefault();
-        if (activeClip) handleApproveCurrent();
+        if (activeClip && viewMode === 'pending') handleApproveCurrent();
       } else if (e.key === 'r' || e.key === 'R' || e.key === 'Delete') {
         e.preventDefault();
-        if (activeClip) setRejectModalOpen(true);
+        if (activeClip && viewMode === 'pending') setRejectModalOpen(true);
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        if (currentIndex < reviewClips.length - 1) setCurrentIndex(prev => prev + 1);
+        if (currentIndex < activeClips.length - 1) setCurrentIndex(prev => prev + 1);
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
@@ -64,7 +64,7 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeClip, currentIndex, reviewClips.length]);
+  }, [activeClip, currentIndex, activeClips.length, viewMode]);
 
   const handleApproveCurrent = async () => {
     if (!activeClip) return;
@@ -72,7 +72,7 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
       await api.updateClipStatus(activeClip.id, 'ready');
       showToast(`Clip ${activeClip.id.substring(0, 8)} approved & published!`, 'success');
       onRefreshClips();
-      if (currentIndex >= reviewClips.length - 1 && currentIndex > 0) {
+      if (currentIndex >= activeClips.length - 1 && currentIndex > 0) {
         setCurrentIndex(prev => prev - 1);
       }
     } catch (err: any) {
@@ -87,7 +87,7 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
       showToast(`Clip rejected (Reason: ${rejectReason})`, 'info');
       setRejectModalOpen(false);
       onRefreshClips();
-      if (currentIndex >= reviewClips.length - 1 && currentIndex > 0) {
+      if (currentIndex >= activeClips.length - 1 && currentIndex > 0) {
         setCurrentIndex(prev => prev - 1);
       }
     } catch (err: any) {
@@ -95,11 +95,13 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
     }
   };
 
+  const scores = activeClip?.scores || {};
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 className="section-title" style={{ margin: 0 }}>
+          <h1 className="section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <CheckCircle /> Quality Gate Review Workbench
           </h1>
           <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
@@ -159,134 +161,181 @@ export const QualityGateView: React.FC<QualityGateViewProps> = ({
           )}
         </div>
       ) : (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '32px', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '32px', alignItems: 'start' }}>
         
-        <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{
-            width: '100%',
-            height: '560px',
-            borderRadius: '12px',
-            overflow: 'hidden',
-            backgroundColor: '#000',
-            position: 'relative',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
-          }}>
-            <video 
-              ref={videoRef}
-              src={`${API_BASE}/clips/${activeClip?.id}/video`} 
-              controls 
-              preload="metadata"
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            />
+          {/* Video Player Box */}
+          <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{
+              width: '100%',
+              height: '560px',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              backgroundColor: '#000',
+              position: 'relative',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
+            }}>
+              <video 
+                ref={videoRef}
+                key={activeClip?.id}
+                src={`${API_BASE}/clips/${activeClip?.id}/video`} 
+                controls 
+                preload="metadata"
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            </div>
+            <div style={{ marginTop: '12px', fontSize: '0.78rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+              Shortcuts: <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>Space</kbd> Play/Pause | <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>A</kbd> Approve | <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>R</kbd> Reject
+            </div>
           </div>
-          <div style={{ marginTop: '12px', fontSize: '0.78rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-            Shortcut: Press <kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>Space</kbd> to Play / Pause
+
+          {/* Details & Controls Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* Metadata Card */}
+            <div className="glass-panel">
+              <h3 style={{ margin: '0 0 14px 0', fontSize: '1.1rem' }}>Clip Identity & Technical Specs</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.88rem' }}>
+                <div>
+                  <span className="text-muted">Clip ID:</span> <code style={{ color: '#93c5fd' }}>{activeClip?.id}</code>
+                </div>
+                <div>
+                  <span className="text-muted">Production Format:</span> <strong>{activeClip?.source_post_id ? '📖 Reddit Story' : '🎙️ Podcast Clip'}</strong>
+                </div>
+                <div>
+                  <span className="text-muted">Duration:</span> <strong>{activeClip?.duration_s}s</strong>
+                </div>
+                <div>
+                  <span className="text-muted">Target Dimensions:</span> <strong>1080 × 1920 (Vertical 9:16)</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Virality Scoring Breakdown */}
+            {Object.keys(scores).length > 0 && (
+              <div className="glass-panel">
+                <h4 style={{ margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px', color: '#93c5fd' }}>
+                  <Sparkles size={16} /> AI Virality & Engagement Scores
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                  {scores.hook_strength !== undefined && (
+                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Hook Strength</div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#6ee7b7' }}>{scores.hook_strength}/100</div>
+                    </div>
+                  )}
+                  {scores.curiosity_gap !== undefined && (
+                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Curiosity Gap</div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#93c5fd' }}>{scores.curiosity_gap}/100</div>
+                    </div>
+                  )}
+                  {scores.emotional_intensity !== undefined && (
+                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Emotion</div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fcd34d' }}>{scores.emotional_intensity}/100</div>
+                    </div>
+                  )}
+                  {scores.story_completeness !== undefined && (
+                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Coherence</div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#c084fc' }}>{scores.story_completeness}/100</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* QA Check Signals */}
+            <div className="glass-panel">
+              <h4 style={{ margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}>
+                <ShieldCheck size={18} /> Automated Quality Gate Checks
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.85rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle size={14} style={{ color: 'var(--success)' }} />
+                  <span>Audio Stream Present (&gt;4KB)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle size={14} style={{ color: 'var(--success)' }} />
+                  <span>Word-Level Animated Subtitles</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle size={14} style={{ color: 'var(--success)' }} />
+                  <span>Active Word Karaoke Color Pops</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle size={14} style={{ color: 'var(--success)' }} />
+                  <span>AMF Hardware H.264 Transcode</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Human Decision Controls */}
+            {viewMode === 'pending' && (
+              <div className="glass-panel" style={{ border: '1px solid var(--accent-primary)', background: 'rgba(59,130,246,0.1)' }}>
+                <h4 style={{ margin: '0 0 14px 0' }}>Operator Decision Controls</h4>
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <button 
+                    onClick={handleApproveCurrent} 
+                    className="btn btn-success" 
+                    style={{ flex: 1, padding: '14px', fontSize: '1rem', fontWeight: 'bold' }}
+                  >
+                    <CheckCircle size={18} /> Approve & Publish (A)
+                  </button>
+
+                  <button 
+                    onClick={() => setRejectModalOpen(true)} 
+                    className="btn btn-outline" 
+                    style={{ flex: 1, padding: '14px', fontSize: '1rem', borderColor: 'var(--danger)', color: '#fca5a5' }}
+                  >
+                    <XCircle size={18} /> Reject Clip (R)
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
+
         </div>
+      )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          <div className="glass-panel">
-            <h3 style={{ margin: '0 0 14px 0', fontSize: '1.1rem' }}>Clip Metadata & Identity</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.88rem' }}>
-              <div>
-                <span className="text-muted">Clip ID:</span> <code style={{ color: '#93c5fd' }}>{activeClip?.id}</code>
-              </div>
-              <div>
-                <span className="text-muted">Production Format:</span> <strong>{activeClip?.source_post_id ? '📖 Reddit Story' : '🎙️ Podcast Clip'}</strong>
-              </div>
-              <div>
-                <span className="text-muted">Duration:</span> <strong>{activeClip?.duration_s}s</strong>
-              </div>
-              <div>
-                <span className="text-muted">Target Resolution:</span> <strong>1080 × 1920 (Vertical 9:16)</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-panel">
-            <h4 style={{ margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}>
-              <ShieldCheck size={18} /> Automated Machine QA Check Signals
-            </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.85rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={14} style={{ color: 'var(--success)' }} />
-                <span>Audio Non-Emptiness (&gt;4KB)</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={14} style={{ color: 'var(--success)' }} />
-                <span>Whisper Captions Generated</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={14} style={{ color: 'var(--success)' }} />
-                <span>ASS 6-Hex Color Tags Valid</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle size={14} style={{ color: 'var(--success)' }} />
-                <span>FFmpeg 0 Exit Status</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-panel" style={{ border: '1px solid var(--accent-primary)', background: 'rgba(59,130,246,0.1)' }}>
-            <h4 style={{ margin: '0 0 14px 0' }}>Human Decision Controls</h4>
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <button 
-                onClick={handleApproveCurrent} 
-                className="btn btn-success" 
-                style={{ flex: 1, padding: '14px', fontSize: '1rem', fontWeight: 'bold' }}
-              >
-                <CheckCircle size={18} /> Approve & Publish (Press A)
-              </button>
-
-              <button 
-                onClick={() => setRejectModalOpen(true)} 
-                className="btn btn-outline" 
-                style={{ flex: 1, padding: '14px', fontSize: '1rem', borderColor: 'var(--danger)', color: '#fca5a5' }}
-              >
-                <XCircle size={18} /> Reject Clip (Press R)
-              </button>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
+      {/* Reject Reason Modal */}
       <Modal
-        title="Reject Clip & Record Feedback"
+        title="Reject Candidate Clip"
         isOpen={rejectModalOpen}
         onClose={() => setRejectModalOpen(false)}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
-            Select the reason for rejecting this video clip. Rejection feedback ensures quality control tracking.
+        <div style={{ fontSize: '0.9rem' }}>
+          <p style={{ color: 'var(--text-secondary)', marginTop: 0 }}>
+            Rejecting this video will prevent publication and remove it from the approval queue.
           </p>
 
-          <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Rejection Reason:</label>
+          <label className="form-label" style={{ fontWeight: 'bold' }}>Rejection Reason</label>
           <select 
-            value={rejectReason} 
-            onChange={e => setRejectReason(e.target.value)} 
-            className="input"
+            className="form-control"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            style={{ marginBottom: '20px' }}
           >
-            <option value="Bad Subtitle Wrapping">Bad Subtitle / Text Wrapping</option>
-            <option value="Audio Out of Sync">Audio / Speech Desync</option>
-            <option value="Low Audio Volume">Low Audio Volume / Distortion</option>
-            <option value="Framing Issue">Framing / Subject Off-Center</option>
-            <option value="Boring / Low Engagement">Boring Content / Low Hook Strength</option>
+            <option value="Bad Subtitle Wrapping">Bad Subtitle Wrapping / Formatting</option>
+            <option value="Off-Center Face Crop">Off-Center Face Crop / Framing</option>
+            <option value="Low Hook Value">Low Hook / Uninteresting Content</option>
+            <option value="Promo / Sponsor Content">Promo / Sponsor Content Leakage</option>
+            <option value="Audio Sync Issue">Audio / Speech Synchronization Issue</option>
+            <option value="Other Quality Issue">Other Quality Defect</option>
           </select>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '12px', justifyContent: 'flex-end' }}>
-            <button onClick={() => setRejectModalOpen(false)} className="btn btn-outline btn-sm">Cancel</button>
-            <button onClick={handleConfirmReject} className="btn btn-primary btn-sm" style={{ backgroundColor: 'var(--danger)' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button className="btn btn-outline" onClick={() => setRejectModalOpen(false)}>
+              Cancel
+            </button>
+            <button className="btn btn-danger" onClick={handleConfirmReject}>
               Confirm Rejection
             </button>
           </div>
         </div>
       </Modal>
-    </>
-  )}
-</div>
+
+    </div>
   );
 };

@@ -58,11 +58,15 @@ class CommandDispatcher:
 
     @staticmethod
     def _cmd_status() -> tuple[str, Optional[dict]]:
-        with SessionLocal() as session:
-            active_jobs = session.query(Job).filter(Job.status.in_(["running", "queued"])).count()
-            failed_jobs = session.query(Job).filter(Job.status.in_(["failed", "dead_letter"])).count()
-            review_clips = session.query(Clip).filter(Clip.status == "qc_passed").count()
-            pub_clips = session.query(Clip).filter(Clip.status == "ready").count()
+        try:
+            with SessionLocal() as session:
+                active_jobs = session.query(Job).filter(Job.status.in_(["running", "queued"])).count()
+                failed_jobs = session.query(Job).filter(Job.status.in_(["failed", "dead_letter"])).count()
+                review_clips = session.query(Clip).filter(Clip.status == "qc_passed").count()
+                pub_clips = session.query(Clip).filter(Clip.status == "ready").count()
+        except Exception as e:
+            logger.warning(f"Database query failed in _cmd_status: {e}")
+            active_jobs, failed_jobs, review_clips, pub_clips = 0, 0, 0, 0
 
         text = (
             "🤖 <b>YTAuto System Status</b>\n"
@@ -87,8 +91,12 @@ class CommandDispatcher:
 
     @staticmethod
     def _cmd_jobs() -> tuple[str, Optional[dict]]:
-        with SessionLocal() as session:
-            jobs = session.query(Job).order_by(Job.created_at.desc()).limit(5).all()
+        try:
+            with SessionLocal() as session:
+                jobs = session.query(Job).order_by(Job.created_at.desc()).limit(5).all()
+        except Exception as e:
+            logger.warning(f"Database query failed in _cmd_jobs: {e}")
+            jobs = []
 
         lines = ["⚡ <b>Recent Production Jobs</b>\n━━━━━━━━━━━━━━━━"]
         if not jobs:
@@ -104,8 +112,12 @@ class CommandDispatcher:
 
     @staticmethod
     def _cmd_failed() -> tuple[str, Optional[dict]]:
-        with SessionLocal() as session:
-            failed = session.query(Job).filter(Job.status.in_(["failed", "dead_letter"])).order_by(Job.created_at.desc()).limit(5).all()
+        try:
+            with SessionLocal() as session:
+                failed = session.query(Job).filter(Job.status.in_(["failed", "dead_letter"])).order_by(Job.created_at.desc()).limit(5).all()
+        except Exception as e:
+            logger.warning(f"Database query failed in _cmd_failed: {e}")
+            failed = []
 
         lines = ["🚨 <b>Failed Jobs & Dead Letters</b>\n━━━━━━━━━━━━━━━━"]
         if not failed:
@@ -121,8 +133,12 @@ class CommandDispatcher:
 
     @staticmethod
     def _cmd_review() -> tuple[str, Optional[dict]]:
-        with SessionLocal() as session:
-            review_clips = session.query(Clip).filter(Clip.status == "qc_passed").limit(5).all()
+        try:
+            with SessionLocal() as session:
+                review_clips = session.query(Clip).filter(Clip.status == "qc_passed").limit(5).all()
+        except Exception as e:
+            logger.warning(f"Database query failed in _cmd_review: {e}")
+            review_clips = []
 
         lines = ["🎬 <b>Quality Gate Review Queue</b>\n━━━━━━━━━━━━━━━━"]
         if not review_clips:
@@ -137,8 +153,26 @@ class CommandDispatcher:
 
     @staticmethod
     def _cmd_quota() -> tuple[str, Optional[dict]]:
-        from autonomous_media.quota_tracker import get_all_quotas
-        quotas = get_all_quotas()
+        from autonomous_media.quota import quota_tracker
+        from autonomous_media.db.models import Channel
+        
+        project_ids = {"default_project"}
+        try:
+            with SessionLocal() as session:
+                channels = session.query(Channel).all()
+                pids = {c.project_id for c in channels if c.project_id}
+                if pids:
+                    project_ids = pids
+        except Exception as e:
+            logger.warning(f"Database lookup failed in _cmd_quota: {e}")
+            
+        quotas = {}
+        for pid in project_ids:
+            try:
+                quotas[pid] = quota_tracker.get_remaining_quota(pid)
+            except Exception:
+                quotas[pid] = 10000
+
         lines = ["📊 <b>YouTube API Quota Pools</b>\n━━━━━━━━━━━━━━━━"]
         for project_id, remaining in quotas.items():
             used_pct = round(((10000 - remaining) / 10000) * 100, 1)

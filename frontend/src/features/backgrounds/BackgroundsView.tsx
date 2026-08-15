@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import type { BackgroundAsset } from '../../types';
-import { api } from '../../services/api';
+import { api, API_BASE } from '../../services/api';
 import { Badge } from '../../components/ui/Badge';
-import { Film, FolderCheck } from 'lucide-react';
+import { Modal } from '../../components/ui/Modal';
+import { Film, FolderCheck, Play, Shield } from 'lucide-react';
 
 interface BackgroundsViewProps {
   bgAssets: BackgroundAsset[];
@@ -17,6 +18,7 @@ export const BackgroundsView: React.FC<BackgroundsViewProps> = ({
 }) => {
   const [uploading, setUploading] = useState(false);
   const [newBgUrl, setNewBgUrl] = useState('');
+  const [previewAsset, setPreviewAsset] = useState<BackgroundAsset | null>(null);
 
   const handleRegisterUrl = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,9 +51,11 @@ export const BackgroundsView: React.FC<BackgroundsViewProps> = ({
 
   return (
     <div>
-      <h1 className="section-title"><Film /> Background Video Asset Pool</h1>
+      <h1 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Film /> Background Video Asset Pool
+      </h1>
       <p className="text-muted" style={{ marginBottom: '24px' }}>
-        Manage background gameplay or ambient video footage used as video backdrops for Reddit story narrations.
+        Manage background gameplay and ambient video footage used as video backdrops for Reddit story narrations.
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
@@ -61,7 +65,7 @@ export const BackgroundsView: React.FC<BackgroundsViewProps> = ({
           <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '16px' }}>
             Select a local `.mp4` video file to upload directly as owned background footage.
           </p>
-          <label className="btn btn-primary" style={{ display: 'inline-flex', cursor: 'pointer' }}>
+          <label className="btn btn-primary" style={{ display: 'inline-flex', cursor: 'pointer', gap: '8px' }}>
             <FolderCheck size={16} /> {uploading ? 'Uploading Video File...' : 'Choose Local MP4 File'}
             <input 
               type="file" 
@@ -100,18 +104,67 @@ export const BackgroundsView: React.FC<BackgroundsViewProps> = ({
       ) : (
         <div className="grid-cards">
           {bgAssets.map(bg => (
-            <div key={bg.id} className="glass-panel">
-              <h4 style={{ wordBreak: 'break-all', fontSize: '0.85rem', marginBottom: '10px' }}>{bg.source_url}</h4>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Badge status={bg.status} />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  Storage Key: {bg.storage_key?.substring(0, 16)}...
+            <div key={bg.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <Badge status={bg.status} />
+                  <span style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#93c5fd' }}>
+                    <Shield size={12} /> {bg.license_type || 'owned'}
+                  </span>
+                </div>
+                <h4 style={{ wordBreak: 'break-all', fontSize: '0.85rem', marginBottom: '10px' }}>{bg.source_url}</h4>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                  {bg.storage_key ? bg.storage_key.substring(0, 16) + '...' : 'No Storage Key'}
                 </span>
+                {bg.storage_key && (
+                  <button 
+                    onClick={() => setPreviewAsset(bg)}
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Play size={12} /> Preview
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Video Preview Modal */}
+      <Modal
+        title="Background Asset Preview"
+        isOpen={previewAsset !== null}
+        onClose={() => setPreviewAsset(null)}
+      >
+        {previewAsset && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{
+              width: '100%',
+              maxHeight: '400px',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              backgroundColor: '#000',
+              marginBottom: '14px'
+            }}>
+              <video 
+                src={`${API_BASE}/background-assets/${previewAsset.id}/file`}
+                controls 
+                autoPlay 
+                style={{ width: '100%', maxHeight: '400px', objectFit: 'contain' }}
+              />
+            </div>
+            <div style={{ fontSize: '0.85rem', width: '100%' }}>
+              <div><strong>Source URL:</strong> {previewAsset.source_url}</div>
+              <div><strong>License:</strong> {previewAsset.license_type}</div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
     </div>
   );
 };

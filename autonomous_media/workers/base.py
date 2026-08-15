@@ -14,10 +14,13 @@ def now():
 
 def touch_heartbeat(session: Session, job_id: str):
     from autonomous_media.db.models import Job
-    job = session.query(Job).filter(Job.id == job_id).first()
-    if job:
-        job.last_heartbeat_at = now()
-        session.commit()
+    try:
+        job = session.query(Job).filter(Job.id == job_id).first()
+        if job:
+            job.last_heartbeat_at = now()
+            session.commit()
+    except Exception:
+        pass
 
 class JobResult:
     def summary(self):
@@ -47,8 +50,11 @@ class Worker(ABC):
             )
             heartbeat_thread.start()
             
+            from autonomous_media.profiling import ProfileStageContext
+
             try:
-                result = self.process(session, job)
+                with ProfileStageContext(stage_name=job.type, job_id=str(job.id), trace_id=job.trace_id):
+                    result = self.process(session, job)
                 job.status = "succeeded"
                 emit_event(f"{job.type}.completed", job.trace_id, result.summary())
                 session.commit()
@@ -90,6 +96,8 @@ class Worker(ABC):
                 heartbeat_thread.join(timeout=2)
                 job.finished_at = now()
                 session.commit()
+                import gc
+                gc.collect()
 
     def _heartbeat_loop(self, job_id, stop: threading.Event):
         while not stop.wait(HEARTBEAT_INTERVAL_S):

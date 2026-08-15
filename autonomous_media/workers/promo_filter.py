@@ -115,6 +115,7 @@ def _llm_classify_batch(
         # Prompt not available yet - skip LLM classification gracefully
         return []
 
+    import json
     flagged: list[TranscriptWindow] = []
 
     for batch_start in range(0, len(windows), batch_size):
@@ -124,21 +125,19 @@ def _llm_classify_batch(
 
         try:
             from autonomous_media.runtime.manager import InferenceRequest
-            request = InferenceRequest(
-                prompt=PROMO_DETECTION_PROMPT_V1,
-                payload={
-                    "windows": [
-                        {"id": i, "text": w.text}
-                        for i, w in enumerate(batch)
-                    ]
-                },
-            )
+            windows_json = json.dumps([
+                {"id": i, "text": w.text}
+                for i, w in enumerate(batch)
+            ])
+            formatted_prompt = PROMO_DETECTION_PROMPT_V1.replace("{windows}", windows_json)
+            request = InferenceRequest(prompt=formatted_prompt)
             result = model_manager.run_stage(
                 stage="promo_detection",
                 request=request,
             )
-            # Expected result shape: {"promotional_ids": [0, 3, 7, ...]}
-            promotional_ids = set(result.parsed.get("promotional_ids", []))
+            # Expected result text: {"promotional_ids": [0, 3, 7, ...]}
+            data = json.loads(result.text) if result.text else {}
+            promotional_ids = set(data.get("promotional_ids", []))
             flagged.extend(batch[i] for i in range(len(batch)) if i in promotional_ids)
         except Exception:
             # LLM classification is best-effort; heuristics already caught the

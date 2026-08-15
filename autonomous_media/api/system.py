@@ -59,6 +59,31 @@ def get_models():
     return {"models": models_res}
 
 
+@router.get("/resources")
+def get_system_resources():
+    from autonomous_media.profiling import HardwareTelemetrySampler, stage_profiler
+    snapshot = HardwareTelemetrySampler.get_system_snapshot()
+    snapshot["recent_profiles"] = stage_profiler.get_recent_profiles(limit=10)
+    snapshot["stage_averages"] = stage_profiler.get_stage_averages()
+    return snapshot
+
+
+@router.post("/storage/flush-raw")
+def flush_raw_storage(db: Session = Depends(get_db)):
+    from autonomous_media.storage import flush_used_raw_sources
+    result = flush_used_raw_sources(db)
+    return result
+
+
+@router.post("/storage/purge-aged")
+def purge_aged_storage(days: int = 7, db: Session = Depends(get_db)):
+    from autonomous_media.storage import purge_aged_assets
+    result = purge_aged_assets(db, days_old=days)
+    return result
+
+
+
+
 @router.get("/quota")
 def get_quota(db: Session = Depends(get_db)):
     from autonomous_media.quota import quota_tracker

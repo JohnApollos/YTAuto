@@ -343,6 +343,66 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ showToast }) => {
         )}
       </div>
 
+      {/* Storage Maintenance & Footprint Optimization */}
+      <div className="glass-panel" style={{ maxWidth: '850px', marginTop: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Settings size={16} /> Storage Lifecycle & Footprint Optimization
+            </h4>
+            <p className="text-muted" style={{ margin: '4px 0 0 0', fontSize: '0.8rem' }}>
+              Purge full-length downloaded source videos from MinIO once rendering is completed to reclaim disk storage.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button 
+              className="btn btn-outline btn-sm"
+              style={{ borderColor: 'rgba(245,158,11,0.4)', color: '#fcd34d' }}
+              onClick={async () => {
+                try {
+                  showToast('Purging assets older than 7 days (preserving background videos)...', 'info');
+                  const res = await api.purgeAgedAssets(7);
+                  showToast(`Purged ${res.deleted_objects} aged files (freed ${res.freed_gb} GB)! All Reddit background videos preserved.`, 'success');
+                } catch (err: any) {
+                  showToast(err.message || 'Purge failed', 'danger');
+                }
+              }}
+            >
+              🗓️ Purge 7-Day Old Assets
+            </button>
+            <button 
+              className="btn btn-outline btn-sm"
+              onClick={async () => {
+                try {
+                  showToast('Flushing completed raw source videos...', 'info');
+                  const res = await api.flushRawStorage();
+                  showToast(`Reclaimed ${res.freed_mb} MB (${res.deleted_objects} raw objects purged)!`, 'success');
+                } catch (err: any) {
+                  showToast(err.message || 'Flush failed', 'danger');
+                }
+              }}
+            >
+              🧹 Flush Used Raw Sources
+            </button>
+            <button 
+              className="btn btn-outline btn-sm"
+              onClick={async () => {
+                try {
+                  showToast('Re-exporting all published clips to local C:\\dev\\YTAuto\\exports...', 'info');
+                  const res = await api.reExportClips();
+                  showToast(`Exported ${res.re_exported_clips} clips to local folder!`, 'success');
+                } catch (err: any) {
+                  showToast(err.message || 'Export failed', 'danger');
+                }
+              }}
+            >
+              📦 Sync Local Exports
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 };
+

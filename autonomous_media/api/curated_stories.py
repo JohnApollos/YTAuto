@@ -90,7 +90,12 @@ def submit_story(
                 slug=f"default_story_channel_{uuid.uuid4().hex[:6]}",
                 niche="Reddit Stories",
                 project_id="default_project",
-                language="en"
+                language="en",
+                target_duration_min_s=30,
+                target_duration_max_s=90,
+                caption_style="classic",
+                music_profile="chill",
+                allowed_content_types=["curated_story"]
             )
             session.add(target_channel)
             session.flush()

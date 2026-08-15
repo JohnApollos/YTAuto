@@ -1,6 +1,6 @@
 import json
 from typing import List, Dict, Any
-from autonomous_media.db.models import CandidateClip
+from autonomous_media.db.models import ClipCandidate
 
 SYSTEM_PROMPT = """You are an expert TikTok and YouTube Shorts producer. 
 Your job is to evaluate short video clips from a podcast transcript and score them on their potential to go viral.
@@ -29,7 +29,7 @@ You MUST respond with a raw JSON array matching this exact schema for each clip:
 """
 
 class BatchedEvaluationPrompt:
-    def __init__(self, clips: List[CandidateClip]):
+    def __init__(self, clips: List[ClipCandidate]):
         self.clips = clips
         # We assume 1 token ~= 4 characters for a rough estimate
         self.estimated_tokens = sum(len(c.transcript_text) for c in clips) // 4
@@ -51,7 +51,7 @@ class BatchedEvaluationPrompt:
             {"role": "user", "content": f"Evaluate the following clips:\n{user_content}"}
         ]
 
-def chunk_clips(clips: List[CandidateClip], max_tokens: int = 6000) -> List[List[CandidateClip]]:
+def chunk_clips(clips: List[ClipCandidate], max_tokens: int = 6000) -> List[List[ClipCandidate]]:
     """Chunks a large list of clips into smaller batches to fit within the LLM context window."""
     batches = []
     current_batch = []

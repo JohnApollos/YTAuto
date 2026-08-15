@@ -69,3 +69,93 @@ def test_render_captions_produces_valid_ass_tags(tmp_path: Path):
     assert "Style: Default,Arial Black,84,&H00FFFFFF,&H0000FFFF,&H00000000" in content
     # Assert 6-hex-digit yellow active word highlight tag is present (\c&H00FFFF&)
     assert r"{\c&H00FFFF&}HELLO{\c&HFFFFFF&}" in content
+
+
+def test_unknown_voice_profile_raises_proper_exception():
+    from autonomous_media.workers.narration import _resolve_voice_model
+    from autonomous_media.exceptions import UnknownVoiceProfileError
+
+    with pytest.raises(UnknownVoiceProfileError):
+        _resolve_voice_model("non_existent_voice_profile_123")
+
+
+def test_telegram_cmd_quota_executes_cleanly():
+    from autonomous_media.services.telegram.commands import CommandDispatcher
+
+    text, markup = CommandDispatcher.handle_command("/quota", "12345", ["12345"])
+    assert "YouTube API Quota Pools" in text
+    assert "Remaining:" in text
+
+
+def test_promo_filter_llm_classify_batch_parses_json():
+    from autonomous_media.workers.promo_filter import TranscriptWindow, _llm_classify_batch
+    from unittest.mock import MagicMock
+
+    windows = [
+        TranscriptWindow(text="Hello and welcome to this video.", start_ms=0, end_ms=5000),
+        TranscriptWindow(text="Make sure to check out our sponsor Squarespace.", start_ms=5000, end_ms=10000),
+    ]
+
+    mock_mgr = MagicMock()
+    mock_res = MagicMock()
+    mock_res.text = '{"promotional_ids": [1]}'
+    mock_mgr.run_stage.return_value = mock_res
+
+    flagged = _llm_classify_batch(windows, mock_mgr)
+    assert len(flagged) == 1
+    assert "Squarespace" in flagged[0].text
+
+
+def test_hardware_telemetry_sampler_returns_valid_metrics():
+    from autonomous_media.profiling import HardwareTelemetrySampler
+
+    snapshot = HardwareTelemetrySampler.get_system_snapshot()
+    assert "cpu" in snapshot
+    assert "ram" in snapshot
+    assert "gpu" in snapshot
+    assert "storage" in snapshot
+    assert "coexistence" in snapshot
+
+    assert snapshot["cpu"]["cores_logical"] >= 1
+    assert snapshot["ram"]["total_gb"] > 0
+    assert snapshot["ram"]["percent"] >= 0
+    assert snapshot["gpu"]["total_vram_gb"] > 0
+    assert snapshot["coexistence"]["status"] in ("optimal", "contended", "critical")
+
+
+def test_stage_profiler_records_stage_execution():
+    from autonomous_media.profiling import ProfileStageContext, stage_profiler
+    import time
+
+    with ProfileStageContext("test_vision_profiling", job_id="job_abc", trace_id="trace_xyz") as ctx:
+        time.sleep(0.01)
+        ctx.set_tokens(generated=20, prompt=50)
+
+    recent = stage_profiler.get_recent_profiles(limit=5)
+    matched = [p for p in recent if p["stage"] == "test_vision_profiling"]
+    assert len(matched) >= 1
+    entry = matched[0]
+    assert entry["duration_s"] > 0
+    assert entry["job_id"] == "job_abc"
+    assert entry["trace_id"] == "trace_xyz"
+    assert entry["tokens_generated"] == 20
+
+
+def test_purge_aged_assets_preserves_backgrounds():
+    from autonomous_media.storage import purge_aged_assets
+    from autonomous_media.db.session import SessionLocal
+    from autonomous_media.db.models import BackgroundAsset
+
+    with SessionLocal() as session:
+        # Run purge with days_old=365 to verify execution correctness without deleting recent data
+        res = purge_aged_assets(session, days_old=365)
+        assert "deleted_objects" in res
+        assert "freed_mb" in res
+        assert "cutoff_date" in res
+
+        # Ensure background assets are not purged
+        bg_assets = session.query(BackgroundAsset).all()
+        assert len(bg_assets) >= 1
+
+
+

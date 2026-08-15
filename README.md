@@ -2,7 +2,7 @@
 
 An autonomous AI content production system. It continuously monitors source YouTube channels, downloads and transcribes long-form podcasts/interviews, scores and selects the best 30–90 second windows using a local LLM, renders them into vertical YouTube Shorts with animated `.ass` captions and branding, and publishes them on a configurable schedule — while requiring minimal ongoing human intervention.
 
-**v1.7 scope:** podcast/interview clipping + operator-submitted curated stories (Reddit narration) · promotional-segment filtering · word-level `.ass` captions · background asset library · production-grade Telegram remote operations & alert subsystem · 9-page modular operator control center (React 19 + Vite) · single consumer PC (Windows 11, AMD Ryzen 5 5500, 16 GB RAM, RX 580 8 GB VRAM).
+**v1.8 scope:** podcast/interview clipping + operator-submitted curated stories (Reddit narration) · promotional-segment filtering · word-level `.ass` captions · background asset library · production-grade Telegram remote operations & alert subsystem · real-time hardware telemetry & coexistence governor · non-intrusive runtime stage profiler · 7-day TTL storage lifecycle retention engine · 9-page modular operator control center (React 19 + Vite) · single consumer PC (Windows 11, AMD Ryzen 5 5500, 16 GB RAM, RX 580 8 GB VRAM).
 
 ---
 
@@ -17,6 +17,7 @@ An autonomous AI content production system. It continuously monitors source YouT
 | Spec v1.5 Upgrade — promo filter · ASS captions · curated stories · background assets | ✅ Complete — see [CHANGELOG](CHANGELOG.md) |
 | **Pipeline Remediation & Codebase Ownership Audit** (35/35 unit tests passing) | ✅ **Complete** — see [ENGINEERING_REMEDIATION](docs/ENGINEERING_REMEDIATION.md) |
 | **Next-Gen Control Center & Telegram Alert Subsystem Overhaul** | ✅ **Complete** — see [Telegram Alerts](docs/telegram-alerts.md) |
+| **Hardware Telemetry, Stage Profiling & 7-Day Storage Lifecycle Retention** (50/50 tests passing) | ✅ **Complete** — see [CHANGELOG](CHANGELOG.md#180) |
 
 ---
 

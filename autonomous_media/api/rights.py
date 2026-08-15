@@ -45,6 +45,7 @@ def get_rights_status(source_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{source_id}")
+@router.post("/{source_id}")
 def update_rights_status(source_id: str, body: RightsUpdate, db: Session = Depends(get_db)):
     try:
         source_uuid = uuid.UUID(source_id)

@@ -34,6 +34,10 @@ frontend/node_modules/
 frontend/dist/
 *.db
 client_secrets.json
+client_secret.json
+cookies.txt
 token.json
-models/piper/
+models/
+.profiling_history.json
 exports/
+{wav}
