@@ -1,9 +1,10 @@
+import uuid
 import pytest
 from autonomous_media.quota import QuotaTracker
 
 def test_quota_tracker_basic_logic():
     tracker = QuotaTracker()
-    project_id = "test-project-123"
+    project_id = f"test-project-{uuid.uuid4().hex[:8]}"
     
     # Defaults to 10000 units
     assert tracker.get_remaining_quota(project_id) == 10000
