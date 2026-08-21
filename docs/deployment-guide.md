@@ -168,7 +168,7 @@ python -c "import fastapi, sqlalchemy, faster_whisper, yt_dlp; print('OK')"
 The system uses local AI inference. Models must be downloaded onto the target machine. Create the models directory inside the project:
 
 ```powershell
-mkdir C:\dev\YTAuto\models
+mkdir models
 ```
 
 ### 4.1 Qwen 3 8B Instruct — LLM (clip scoring, title/description generation)
@@ -180,7 +180,7 @@ File to download: **`Qwen3-8B-Q4_K_M.gguf`** (~5.2 GB)
 ```powershell
 # Using huggingface-cli (pip install huggingface_hub)
 pip install huggingface_hub
-huggingface-cli download Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf --local-dir C:\dev\YTAuto\models
+huggingface-cli download Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf --local-dir models
 ```
 
 ### 4.2 Qwen2.5-VL 7B — Vision LLM (speaker tracking context, OCR)
@@ -190,7 +190,7 @@ Download: https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct-GGUF
 File to download: **`Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf`** (~4.8 GB)
 
 ```powershell
-huggingface-cli download Qwen/Qwen2.5-VL-7B-Instruct-GGUF Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf --local-dir C:\dev\YTAuto\models
+huggingface-cli download Qwen/Qwen2.5-VL-7B-Instruct-GGUF Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf --local-dir models
 ```
 
 ### 4.3 Whisper Large-v3 Turbo — Speech Recognition
@@ -358,7 +358,7 @@ The `llama-server` process runs natively on Windows — not in Docker — to get
 **Terminal A — LLM Server (Qwen 3 8B):**
 ```powershell
 llama-server.exe `
-  --model C:\dev\YTAuto\models\Qwen3-8B-Q4_K_M.gguf `
+  --model models/Qwen3-8B-Q4_K_M.gguf `
   --port 8080 `
   --gpu-layers 99 `
   --ctx-size 32768 `

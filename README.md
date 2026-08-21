@@ -103,10 +103,13 @@ docker compose up -d
 alembic upgrade head
 
 # 7. Start the AI model server (leave this window open)
-llama-server.exe --model C:\dev\YTAuto\models\qwen3-8b-Q4_K_M.gguf --port 8080 --gpu-layers 99
+llama-server.exe --model models/qwen3-8b-Q4_K_M.gguf --port 8080 --gpu-layers 99
 
-# 8. Start the FastAPI application server & scheduler
-uvicorn autonomous_media.api.main:app --host 0.0.0.0 --port 8000
+# 8. Start the FastAPI application server & React Control Center
+uvicorn autonomous_media.main:app --host 0.0.0.0 --port 8000
+
+# 9. In a separate terminal, start the autonomous background worker scheduler
+python autonomous_media/main.py
 ```
 
 ---

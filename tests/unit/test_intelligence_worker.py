@@ -16,6 +16,9 @@ mock_sentence_transformers.SentenceTransformer = mock_transformer_class
 @patch("autonomous_media.workers.intelligence.emit_event")
 @patch("autonomous_media.workers.intelligence.stage_manager")
 def test_intelligence_worker_success(mock_stage_manager, mock_emit, mock_get_object):
+    import autonomous_media.workers.intelligence as intel_module
+    intel_module._EMBED_MODEL = None
+
     transcript_id = uuid.uuid4()
     channel_id = uuid.uuid4()
     job = Job(
