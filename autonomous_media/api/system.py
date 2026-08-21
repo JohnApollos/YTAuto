@@ -68,6 +68,64 @@ def get_system_resources():
     return snapshot
 
 
+@router.get("/coexistence/decision")
+def get_coexistence_decision(db: Session = Depends(get_db)):
+    """
+    Direct actionable governor endpoint for OpenWorker and external agent systems.
+    Evaluates live hardware headroom (RAM, VRAM, CPU) and YTAuto pipeline execution state
+    to return a definitive operating mode and concurrency limits.
+    """
+    from autonomous_media.profiling import HardwareTelemetrySampler
+    from autonomous_media.db.models import Job
+
+    snapshot = HardwareTelemetrySampler.get_system_snapshot()
+    ram = snapshot["ram"]
+    gpu = snapshot["gpu"]
+
+    # Check active YTAuto jobs
+    active_jobs = db.query(Job).filter(Job.status.in_(["running"])).all()
+    running_types = {j.type for j in active_jobs}
+
+    is_rendering = "rendering" in running_types
+    is_scoring = "intelligence" in running_types or "transcription" in running_types
+
+    # 1. Critical Contention / High Memory Pressure: Protect YTAuto
+    if ram["free_gb"] < 1.5 or is_rendering or gpu["free_vram_gb"] < 1.8:
+        return {
+            "allowed": False,
+            "mode": "protected",
+            "reason": f"YTAuto active workload: {'rendering' if is_rendering else 'high memory pressure'} (RAM free: {ram['free_gb']} GB, VRAM free: {gpu['free_vram_gb']} GB)",
+            "retry_after_s": 30,
+            "recommended_model": None,
+            "max_concurrent_agents": 0,
+            "allow_browser_automation": False
+        }
+
+    # 2. Light Load (e.g. scoring or moderate headroom)
+    if is_scoring or ram["free_gb"] < 4.0 or gpu["free_vram_gb"] < 3.5:
+        return {
+            "allowed": True,
+            "mode": "light",
+            "reason": f"YTAuto active in light stage or moderate headroom (RAM free: {ram['free_gb']} GB)",
+            "retry_after_s": 15,
+            "recommended_model": "qwen2.5:3b-instruct",
+            "max_concurrent_agents": 1,
+            "allow_browser_automation": False
+        }
+
+    # 3. Optimal Headroom: YTAuto idle / polling
+    return {
+        "allowed": True,
+        "mode": "full",
+        "reason": f"System resources optimal; YTAuto idle (RAM free: {ram['free_gb']} GB, VRAM free: {gpu['free_vram_gb']} GB)",
+        "retry_after_s": 10,
+        "recommended_model": "qwen2.5:7b-instruct",
+        "max_concurrent_agents": 4,
+        "allow_browser_automation": True
+    }
+
+
+
 @router.post("/storage/flush-raw")
 def flush_raw_storage(db: Session = Depends(get_db)):
     from autonomous_media.storage import flush_used_raw_sources

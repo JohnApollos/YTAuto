@@ -158,4 +158,18 @@ def test_purge_aged_assets_preserves_backgrounds():
         assert len(bg_assets) >= 1
 
 
+def test_coexistence_governor_decision_endpoint():
+    from autonomous_media.api.system import get_coexistence_decision
+    from autonomous_media.db.session import SessionLocal
+
+    with SessionLocal() as session:
+        decision = get_coexistence_decision(db=session)
+        assert "allowed" in decision
+        assert decision["mode"] in ("protected", "light", "full")
+        assert "reason" in decision
+        assert "max_concurrent_agents" in decision
+        assert "allow_browser_automation" in decision
+
+
+
 
