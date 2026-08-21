@@ -200,6 +200,16 @@ export const api = {
     return handleResponse(res);
   },
 
+  async scoutRedditStoriesNow(): Promise<{ status: string; enqueued_jobs: string[] }> {
+    const res = await fetch(`${API_BASE}/curated-stories/scout-now`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  async pollSourceNow(sourceId: string): Promise<{ status: string; job_id: string; trace_id: string }> {
+    const res = await fetch(`${API_BASE}/sources/${sourceId}/poll-now`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
   async getBackgroundAssets(): Promise<BackgroundAsset[]> {
     const res = await fetch(`${API_BASE}/background-assets`);
     return handleResponse<BackgroundAsset[]>(res);

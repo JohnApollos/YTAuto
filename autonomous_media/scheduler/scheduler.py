@@ -37,6 +37,7 @@ class Scheduler:
         self.worker_registry: dict = worker_registry or {}
         self.max_concurrent_jobs = max_concurrent_jobs
         self.running = False
+        self._initial_startup_seeded = False
 
     def start(self):
         logger.info("Scheduler starting", extra={"trace_id": "scheduler"})
@@ -77,11 +78,14 @@ class Scheduler:
     def _seed_poll_jobs(self):
         """
         Scan active ContentSource items and enqueue acquisition jobs when they are due.
+        On initial system startup, immediately seeds active sources so operators don't wait for hourly interval.
         """
         from datetime import datetime, timezone, timedelta
         from autonomous_media.db.models import ContentSource, Job
         
         now_utc = datetime.now(timezone.utc)
+        is_initial_boot = not self._initial_startup_seeded
+        self._initial_startup_seeded = True
         
         with self.session_maker() as session:
             active_sources = session.query(ContentSource).filter(
@@ -115,7 +119,7 @@ class Scheduler:
                 poll_interval_minutes = source.config.get("poll_interval_minutes", 60)
                 last_polled = source.last_polled_at
                 
-                if last_polled is not None:
+                if not is_initial_boot and last_polled is not None:
                     if last_polled.tzinfo is None:
                         last_polled = last_polled.replace(tzinfo=timezone.utc)
                     if now_utc - last_polled < timedelta(minutes=poll_interval_minutes):
@@ -123,7 +127,7 @@ class Scheduler:
                 
                 # Polling is due, seed the acquisition job
                 logger.info(
-                    f"Seeding acquisition job for content source {source.id}",
+                    f"Seeding acquisition job for content source {source.id} (boot_seed={is_initial_boot})",
                     extra={"trace_id": f"poll-seed-{source.id}"}
                 )
                 new_job = Job(

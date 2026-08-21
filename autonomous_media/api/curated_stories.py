@@ -215,3 +215,45 @@ def re_queue_all_stories(session: Session = Depends(get_db)):
 
     session.commit()
     return {"status": "success", "requeued_stories": requeued}
+
+
+@router.post("/scout-now")
+def scout_reddit_stories_now(session: Session = Depends(get_db)):
+    """Triggers immediate automated discovery and ingestion of viral Reddit stories."""
+    sources = session.query(ContentSource).filter(
+        ContentSource.active == True,
+        ContentSource.type.in_(["reddit_scraper", "curated_story"])
+    ).all()
+    if not sources:
+        # Create a default Reddit curated story source if none exists
+        default_channel = session.query(Channel).first()
+        cs = ContentSource(
+            id=uuid.uuid4(),
+            channel_id=default_channel.id if default_channel else uuid.uuid4(),
+            type="curated_story",
+            external_ref="reddit_curated_stories",
+            config={"poll_interval_minutes": 60, "max_new_videos_per_poll": 1},
+            active=True
+        )
+        session.add(cs)
+        session.flush()
+        sources = [cs]
+
+    enqueued_jobs = []
+    for s in sources:
+        s.last_polled_at = None
+        job = Job(
+            type="acquisition",
+            payload={"source_id": str(s.id)},
+            channel_id=s.channel_id,
+            priority=1,
+            attempts=0,
+            max_attempts=3,
+            trace_id=f"manual-scout-{s.id}"
+        )
+        session.add(job)
+        session.flush()
+        enqueued_jobs.append(str(job.id))
+
+    session.commit()
+    return {"status": "success", "enqueued_jobs": enqueued_jobs}

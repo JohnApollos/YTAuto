@@ -126,3 +126,34 @@ def update_source(source_id: str, body: SourceUpdate, db: Session = Depends(get_
         "active": source.active,
         "config": source.config,
     }
+
+
+@router.post("/{source_id}/poll-now")
+def trigger_source_poll_now(source_id: str, db: Session = Depends(get_db)):
+    """Force immediately enqueuing an acquisition job for this content source."""
+    from autonomous_media.db.models import Job
+    try:
+        source_uuid = uuid.UUID(source_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid source_id format")
+
+    source = db.query(ContentSource).filter(ContentSource.id == source_uuid).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="ContentSource not found")
+
+    job = Job(
+        type="acquisition",
+        payload={"source_id": str(source.id)},
+        channel_id=source.channel_id,
+        priority=1,
+        attempts=0,
+        max_attempts=3,
+        trace_id=f"manual-poll-{source.id}"
+    )
+    db.add(job)
+    # Reset last_polled_at
+    source.last_polled_at = None
+    db.commit()
+    db.refresh(job)
+
+    return {"status": "success", "job_id": str(job.id), "trace_id": job.trace_id}

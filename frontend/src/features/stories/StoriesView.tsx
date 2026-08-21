@@ -95,20 +95,46 @@ export const StoriesView: React.FC<StoriesViewProps> = ({
     }
   };
 
+  const [scouting, setScouting] = useState(false);
+
+  const handleScoutNow = async () => {
+    setScouting(true);
+    try {
+      const res = await api.scoutRedditStoriesNow();
+      showToast(`Scout triggered! Enqueued ${res.enqueued_jobs?.length || 1} Reddit acquisition job. Check Jobs queue!`, 'success');
+      onRefreshStories();
+    } catch (err: any) {
+      showToast(`Failed to scout stories: ${err.message}`, 'danger');
+    } finally {
+      setScouting(false);
+    }
+  };
+
   return (
     <div>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 className="section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
             <BookOpen /> Curated Reddit Story Studio
           </h1>
           <p className="text-muted" style={{ margin: '4px 0 0 0' }}>
-            Submit narrative text stories for automated Piper neural TTS voiceover, ASS subtitles, and vertical video rendering.
+            Automated Reddit scout & submission studio for neural voiceover, ASS subtitles, and vertical video rendering.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={handleReQueueAll}>
-          <RefreshCw size={16} /> Re-render All Stories
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className="btn btn-primary" 
+            style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', display: 'flex', alignItems: 'center', gap: '6px' }} 
+            onClick={handleScoutNow}
+            disabled={scouting}
+          >
+            <Sparkles size={16} /> {scouting ? 'Scouting Reddit...' : 'Scout Top Stories Now'}
+          </button>
+          <button className="btn btn-secondary" onClick={handleReQueueAll}>
+            <RefreshCw size={16} /> Re-render All Stories
+          </button>
+        </div>
       </div>
 
       <div className="glass-panel" style={{ marginBottom: '24px' }}>
