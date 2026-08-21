@@ -14,6 +14,20 @@ from autonomous_media.workers.promo_filter import detect_promo_segments, filter_
 
 logger = get_logger("workers.intelligence")
 
+_EMBED_MODEL = None
+
+def _get_embed_model():
+    global _EMBED_MODEL
+    if _EMBED_MODEL is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            _EMBED_MODEL = SentenceTransformer("all-mpnet-base-v2")
+        except Exception as e:
+            logger.warning(f"SentenceTransformer not available ({e}). Using deterministic hash embeddings fallback.")
+            _EMBED_MODEL = False
+    return _EMBED_MODEL if _EMBED_MODEL is not False else None
+
+
 class IntelligenceWorker(Worker):
     job_type = 'intelligence'
 
@@ -124,9 +138,9 @@ class IntelligenceWorker(Worker):
             logger.info("No candidates passed the heuristic filter.", extra={"trace_id": job.trace_id})
             return JobResult()
 
-        # Keep top 15 candidates by heuristic score
+        # Keep top 6 candidates by heuristic score (optimized for fast 3-4 minute evaluation)
         passed_candidates.sort(key=lambda x: x["heuristic_score"], reverse=True)
-        top_candidates = passed_candidates[:15]
+        top_candidates = passed_candidates[:6]
 
         # 4. Batched LLM scoring via StageModelManager
         # Load scoring prompt template
@@ -139,13 +153,7 @@ class IntelligenceWorker(Worker):
         except Exception as e:
             raise StageUnrecoverableError(f"Failed to load scoring prompt template: {e}")
 
-        # Load embedding model for novelty check
-        embed_model = None
-        try:
-            from sentence_transformers import SentenceTransformer
-            embed_model = SentenceTransformer("all-mpnet-base-v2")
-        except Exception as e:
-            logger.warning(f"SentenceTransformer not available ({e}). Using deterministic hash embeddings fallback.")
+        embed_model = _get_embed_model()
 
         def get_embedding(text: str) -> list[float]:
             if embed_model is not None:
