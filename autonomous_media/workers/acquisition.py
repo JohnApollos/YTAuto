@@ -32,6 +32,74 @@ class AcquisitionWorker(Worker):
         if not content_source:
             raise StageUnrecoverableError(f"ContentSource {source_id} not found")
 
+        # Handle Automated Reddit Story Scraper & Ingestion
+        if content_source.type in ("reddit_scraper", "curated_story"):
+            from autonomous_media.sources.reddit_story import RedditStorySource, CURATED_SUBREDDITS
+            from autonomous_media.db.models import SourcePost
+
+            existing_posts = session.query(SourcePost.source_url).filter(
+                SourcePost.content_source_id == source_id
+            ).all()
+            existing_urls = {p[0] for p in existing_posts if p[0]}
+
+            configured_subreddits = content_source.config.get("subreddits") or list(CURATED_SUBREDDITS)
+            reddit_source = RedditStorySource(
+                subreddits=configured_subreddits,
+                min_upvotes=content_source.config.get("min_upvotes", 300),
+                min_upvote_ratio=content_source.config.get("min_upvote_ratio", 0.85),
+                min_words=content_source.config.get("min_words", 90),
+                max_words=content_source.config.get("max_words", 350),
+                max_new_items=content_source.config.get("max_new_videos_per_poll", 1)
+            )
+
+            discovered_stories = reddit_source.discover(existing_ids=existing_urls)
+            logger.info(
+                f"Discovered {len(discovered_stories)} new viral Reddit stories",
+                extra={"trace_id": job.trace_id, "source_id": str(source_id)}
+            )
+
+            for story in discovered_stories:
+                post_id = uuid.uuid4()
+                trace_id = f"story-{post_id}"
+
+                post = SourcePost(
+                    id=post_id,
+                    content_source_id=content_source.id,
+                    title=story.title,
+                    body_text=getattr(story, "body_text", ""),
+                    source_url=story.url,
+                    author=getattr(story, "author", "Anonymous"),
+                    subreddit=getattr(story, "subreddit", "RedditStories"),
+                    status="pending",
+                    submitted_at=datetime.now(timezone.utc),
+                )
+                session.add(post)
+                session.flush()
+
+                # Enqueue script_preparation job
+                prep_job = Job(
+                    type="script_preparation",
+                    payload={"source_post_id": str(post_id)},
+                    trace_id=trace_id,
+                    channel_id=content_source.channel_id,
+                    priority=5,
+                    attempts=0,
+                    max_attempts=3,
+                )
+                session.add(prep_job)
+                session.commit()
+
+                logger.info(
+                    f"Ingested viral Reddit story '{story.title[:50]}...' into SourcePost {post_id} and enqueued script_preparation",
+                    extra={"trace_id": trace_id}
+                )
+
+            # Update last_polled_at on content source
+            content_source.last_polled_at = datetime.now(timezone.utc)
+            session.commit()
+            return JobResult()
+
+        # Handle YouTube Channel Video Acquisition
         # Get existing external_video_ids to avoid duplicates and stop discover paging early
         existing_videos = session.query(SourceVideo.external_video_id).filter(
             SourceVideo.content_source_id == source_id

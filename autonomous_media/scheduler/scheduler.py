@@ -86,7 +86,7 @@ class Scheduler:
         with self.session_maker() as session:
             active_sources = session.query(ContentSource).filter(
                 ContentSource.active == True,
-                ContentSource.type == "youtube_channel"
+                ContentSource.type.in_(["youtube_channel", "reddit_scraper", "curated_story"])
             ).all()
             if not active_sources:
                 return

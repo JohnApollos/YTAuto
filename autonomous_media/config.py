@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     youtube_api_key: Optional[str] = None
     youtube_api_env: str = "production"
     model_env: str = "production"
+    reddit_client_id: Optional[str] = None
+    reddit_client_secret: Optional[str] = None
+    reddit_user_agent: Optional[str] = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

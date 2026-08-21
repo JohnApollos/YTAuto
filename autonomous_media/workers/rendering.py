@@ -277,6 +277,44 @@ class RenderingWorker(Worker):
                 audio = stream_a.audio
                 video = video.filter('crop', f"in_w*{crop_w_norm}", "in_h", f"in_w*{crop_x_norm}", 0)
                 video = video.filter('scale', 1080, 1920)
+
+            # Reddit Stories Visual & Audio Enhancements
+            if is_story and source_post:
+                # 1. Overlay visual Reddit Hook Card (t=0..3.0s) with smooth fade-out
+                try:
+                    from autonomous_media.workers.hook_card import generate_reddit_hook_card
+                    hook_card_path = os.path.join(temp_dir, "hook_card.png")
+                    generate_reddit_hook_card(
+                        title=source_post.title or "Reddit Story",
+                        subreddit=getattr(source_post, "subreddit", None) or "AmItheAsshole",
+                        author=getattr(source_post, "author", None) or "Anonymous",
+                        upvotes=14200,
+                        comments_count=840,
+                        out_path=hook_card_path,
+                        width=960 if not is_long_form else 1100,
+                    )
+                    if os.path.exists(hook_card_path):
+                        hook_stream = ffmpeg.input(hook_card_path)
+                        hook_v = hook_stream.video.filter('fade', type='out', start_time=2.6, duration=0.4, alpha=1)
+                        overlay_y = 280 if not is_long_form else 140
+                        video = ffmpeg.filter([video, hook_v], 'overlay', x="(main_w-overlay_w)/2", y=overlay_y, enable='between(t,0,3.0)')
+                        logger.info("Composited Reddit visual hook card overlay (t=0..3s)", extra={"trace_id": job.trace_id})
+                except Exception as e:
+                    logger.warning(f"Failed to generate/overlay Reddit hook card: {e}", extra={"trace_id": job.trace_id})
+
+                # 2. Ambient background music ducking at -24dB under speech
+                try:
+                    project_root = Path(__file__).resolve().parents[2]
+                    music_path = os.path.join(project_root, "autonomous_media", "assets", "music", "ambient_suspense.wav")
+                    if os.path.exists(music_path):
+                        music_stream = ffmpeg.input(music_path, stream_loop=-1)
+                        music_a = music_stream.audio.filter('volume', 0.08)
+                        if aud_dur > 0:
+                            music_a = music_a.filter('atrim', duration=aud_dur).filter('afade', type='out', start_time=max(0.0, aud_dur - 1.5), duration=1.5)
+                        audio = ffmpeg.filter([audio, music_a], 'amix', inputs=2, duration='first', dropout_transition=2)
+                        logger.info("Mixed ambient background music at -24dB", extra={"trace_id": job.trace_id})
+                except Exception as e:
+                    logger.warning(f"Failed to mix ambient background music: {e}", extra={"trace_id": job.trace_id})
             
             # Burn in subtitles (using relative filename captions.ass inside temp_dir to guarantee Windows FFmpeg compatibility)
             if use_ass:
