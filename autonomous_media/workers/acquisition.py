@@ -102,7 +102,7 @@ class AcquisitionWorker(Worker):
 
                 # Fetch (download with yt-dlp)
                 ydl_opts = {
-                    'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                    'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]/best',
                     'outtmpl': video_path,
                     'quiet': True,
                     'no_warnings': True,
@@ -112,6 +112,12 @@ class AcquisitionWorker(Worker):
                     'fragment_retries': 10,
                     'extractor_retries': 5,
                     'concurrent_fragment_downloads': 4,
+                    'http_chunk_size': 10485760,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android', 'ios', 'web']
+                        }
+                    },
                 }
                 if os.path.exists(cookies_path):
                     ydl_opts['cookiefile'] = cookies_path
@@ -123,8 +129,17 @@ class AcquisitionWorker(Worker):
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([item.url])
                 except Exception as e:
-                    logger.error(f"yt-dlp download failed: {e}", extra={"trace_id": trace_id})
-                    continue
+                    logger.warning(f"yt-dlp download initial attempt encountered error ({e}). Retrying with fallback options...", extra={"trace_id": trace_id})
+                    # Attempt fallback without cookies in case cookies.txt contains an expired session
+                    ydl_opts_fallback = dict(ydl_opts)
+                    if 'cookiefile' in ydl_opts_fallback:
+                        del ydl_opts_fallback['cookiefile']
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts_fallback) as ydl_fallback:
+                            ydl_fallback.download([item.url])
+                    except Exception as e2:
+                        logger.error(f"yt-dlp download failed after fallback: {e2}", extra={"trace_id": trace_id})
+                        continue
 
                 if not os.path.exists(video_path):
                     logger.error(f"Downloaded video file not found at {video_path}", extra={"trace_id": trace_id})
