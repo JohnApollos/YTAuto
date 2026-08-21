@@ -68,6 +68,84 @@ def format_reddit_video_metadata(source_post, clip_dur: float) -> tuple[str, str
     return video_title, video_description
 
 
+def format_podcast_clip_metadata(source_video, clip_candidate, candidate_text: str, clip_dur: float, channel: Channel) -> tuple[str, str]:
+    """Generates an engaging, high-CTR YouTube title (strictly <= 100 chars) and SEO-optimized description for podcast clips."""
+    source_title = (source_video.title or "Podcast Clip").strip()
+    is_short = clip_dur <= 60
+    tag = "#Shorts" if is_short else "#Podcast"
+    
+    # 1. Try LLM Generation
+    prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")
+    title_prompt_path = os.path.join(prompts_dir, "title_v1.txt")
+    candidate_snippet = " ".join(candidate_text.split()[:80])
+    
+    llm_title = None
+    try:
+        if os.path.exists(title_prompt_path):
+            with open(title_prompt_path, "r", encoding="utf-8") as f:
+                title_template = f.read()
+            recent_titles_str = ", ".join(channel.branding.get("recent_titles", ["Awesome short clip"])) if channel and channel.branding else "Awesome short clip"
+            title_prompt = title_template.replace("{recent_titles}", recent_titles_str).replace("{candidate_text}", candidate_snippet)
+            title_res = stage_manager.run_stage("title", InferenceRequest(prompt=title_prompt, max_tokens=100))
+            raw_t = title_res.text.strip().replace('"', '').replace("'", "")
+            if not raw_t.startswith("{") and "hook_strength" not in raw_t and len(raw_t) > 10:
+                llm_title = raw_t
+    except Exception as e:
+        logger.warning(f"LLM title inference skipped or failed: {e}")
+
+    # 2. High-CTR Hook Construction
+    if llm_title:
+        clean_title = re.sub(r'#\w+', '', llm_title).strip()
+    else:
+        # High-CTR Rule-based Hook Engine
+        speaker = ""
+        topic = source_title
+        if ":" in source_title:
+            parts = source_title.split(":", 1)
+            speaker = parts[0].strip()
+            topic = parts[1].strip()
+        elif " - " in source_title:
+            parts = source_title.split(" - ", 1)
+            speaker = parts[0].strip()
+            topic = parts[1].strip()
+            
+        topic = re.sub(r'\[.*?\]|\(.*?\)|#\d+', '', topic).strip()
+        
+        # Extract punchy sentence from spoken clip
+        sentences = [s.strip() for s in re.split(r'[.!?]+', candidate_text) if len(s.strip().split()) >= 4]
+        punchline = sentences[0] if sentences else topic
+        
+        if speaker and topic and len(f"{speaker}: {topic}") <= 78:
+            clean_title = f"{speaker}: {topic}"
+        elif speaker and punchline:
+            clean_title = f"{speaker}: {punchline}"
+        else:
+            clean_title = topic or source_title
+
+    emoji = "🤯" if any(w in candidate_text.lower() for w in ["ai", "future", "mind", "crazy", "insane", "secret", "threat", "truth"]) else "🧠"
+    
+    max_body_len = 100 - len(tag) - len(emoji) - 3
+    if len(clean_title) > max_body_len:
+        clean_title = clean_title[:max_body_len - 3].rsplit(' ', 1)[0] + "..."
+
+    video_title = f"{clean_title} {emoji} {tag}".strip()
+    if len(video_title) > 100:
+        video_title = video_title[:95] + "..."
+
+    # 3. Rich Description Formatting
+    snippet_preview = " ".join(candidate_text.split()[:50])
+    video_description = (
+        f"🔥 {video_title}\n\n"
+        f"💡 Key Discussion & Insights:\n\"{snippet_preview}...\"\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎙️ Episode / Source: {source_title}\n"
+        f"📺 Original Link: {getattr(source_video, 'url', 'YouTube')}\n\n"
+        f"👉 Subscribe for daily mind-expanding podcast highlights, psychology breakthroughs, and deep wisdom!\n\n"
+        f"#shorts #podcast #mindset #motivation #wisdom #psychology #science #viral #trending #reels #deepdive"
+    )
+    return video_title, video_description
+
+
 class PublishingWorker(Worker):
     job_type = 'publishing'
 
@@ -141,39 +219,15 @@ class PublishingWorker(Worker):
 
             clip_words = [w for w in words if w["start_ms"] >= clip_candidate.start_ms and w["end_ms"] <= clip_candidate.end_ms]
             candidate_text = " ".join(w["word"] for w in clip_words) if clip_words else (source_video.title or "Clip")
+            clip_dur = clip.duration_s if clip.duration_s else (clip_candidate.end_ms - clip_candidate.start_ms) / 1000.0
 
-            candidate_snippet = " ".join(candidate_text.split()[:80])
-
-            # A. Title generation
-            prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")
-            title_prompt_path = os.path.join(prompts_dir, "title_v1.txt")
-            try:
-                with open(title_prompt_path, "r", encoding="utf-8") as f:
-                    title_template = f.read()
-                recent_titles_str = ", ".join(channel.branding.get("recent_titles", ["Awesome short clip"]))
-                title_prompt = title_template.replace("{recent_titles}", recent_titles_str).replace("{candidate_text}", candidate_snippet)
-                title_res = stage_manager.run_stage("title", InferenceRequest(prompt=title_prompt, max_tokens=100))
-                raw_t = title_res.text.strip().replace('"', '')
-                if raw_t.startswith("{") or "hook_strength" in raw_t:
-                    video_title = f"Clip from: {source_video.title or 'Podcast'}"
-                else:
-                    video_title = raw_t[:95]
-            except Exception as e:
-                video_title = f"Clip from: {source_video.title or 'Podcast'}"
-
-            # B. Description generation
-            desc_prompt_path = os.path.join(prompts_dir, "description_v1.txt")
-            try:
-                with open(desc_prompt_path, "r", encoding="utf-8") as f:
-                    desc_template = f.read()
-                desc_prompt = desc_template.replace("{candidate_text}", candidate_snippet)
-                desc_res = stage_manager.run_stage("description", InferenceRequest(prompt=desc_prompt, max_tokens=250))
-                desc_data = json.loads(desc_res.text) if desc_res.text.strip().startswith("{") else {}
-                desc_text = desc_data.get("description", "An amazing short clip.") if isinstance(desc_data, dict) else "An amazing short clip."
-                hashtags = " ".join(desc_data.get("hashtags", ["#shorts", "#podcast"])) if isinstance(desc_data, dict) else "#shorts #podcast"
-                video_description = f"{desc_text}\n\n{hashtags}"
-            except Exception as e:
-                video_description = f"Clip extracted from {source_video.url or 'original video'}\n#shorts #podcast"
+            video_title, video_description = format_podcast_clip_metadata(
+                source_video=source_video,
+                clip_candidate=clip_candidate,
+                candidate_text=candidate_text,
+                clip_dur=clip_dur,
+                channel=channel
+            )
 
             # Directory: exports/youtube_clips/<source_video_title>/
             folder_name = sanitize_filename(source_video.title or "Podcast Clips")
