@@ -57,7 +57,7 @@ def test_render_captions_produces_valid_ass_tags(tmp_path: Path):
         WordTimestamp(text="Hello", start_s=0.0, end_s=0.5),
         WordTimestamp(text="world", start_s=0.5, end_s=1.0),
     ]
-    style = CaptionStyle(name="test_style", font="Arial Black", font_size=88)
+    style = CaptionStyle(name="test_style", font="Arial Black", font_size=98)
     out_ass = tmp_path / "captions.ass"
 
     render_captions(timestamps, style, out_ass)
@@ -66,7 +66,7 @@ def test_render_captions_produces_valid_ass_tags(tmp_path: Path):
     content = out_ass.read_text(encoding="utf-8")
     assert "[Script Info]" in content
     assert "[V4+ Styles]" in content
-    assert "Style: Default,Arial Black,88,&H00FFFFFF,&H0000FFFF,&H00000000" in content
+    assert "Style: Default,Arial Black,98,&H00FFFFFF,&H0000FFFF,&H00000000" in content
     # Assert 6-hex-digit yellow active word highlight tag is present (\c&H00FFFF&)
     assert r"{\c&H00FFFF&}HELLO{\c&HFFFFFF&}" in content
 
@@ -176,10 +176,11 @@ def test_caption_presets_all_caps_and_middle_positioning():
     
     style = CaptionStyle.from_channel_config("reddit_shorts")
     assert style.uppercase is True
-    # Middle of the screen margin should be elevated (> 800px)
-    assert style.position_margin_v >= 800
+    # Middle of the screen margin should be placed high (>= 900px)
+    assert style.position_margin_v >= 900
+    assert style.font_size >= 95
     assert "Montserrat" in style.font or "Arial Black" in style.font
-    assert style.outline_width >= 5
+    assert style.outline_width >= 6
 
 
 def test_normalize_spoken_script_smart_punctuation_and_intonation():

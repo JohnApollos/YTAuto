@@ -35,14 +35,14 @@ from pathlib import Path
 class CaptionStyle:
     name: str
     font: str = "Montserrat, Arial Black"
-    font_size: int = 88
+    font_size: int = 98
     primary_color: str = "&H00FFFFFF"   # ASS format: &HAABBGGRR, white
     outline_color: str = "&H00000000"   # black
     highlight_color: str = "&H0000FFFF" # vibrant electric yellow
-    outline_width: int = 6              # thick crisp stroke for readability
+    outline_width: int = 7              # thick crisp stroke for large typography
     max_words_per_screen: int = 3
-    uppercase: bool = True              # strictly ALL CAPS for maximum virality
-    position_margin_v: int = 880        # positioned in the middle of the screen (50-55% height at 1080x1920)
+    uppercase: bool = True              # strictly ALL CAPS
+    position_margin_v: int = 980        # placed higher in upper-middle of screen (55-60% height)
 
     @staticmethod
     def from_channel_config(preset_name: str) -> "CaptionStyle":
@@ -53,86 +53,86 @@ CAPTION_PRESETS: dict[str, CaptionStyle] = {
     "reddit_shorts": CaptionStyle(
         name="reddit_shorts",
         font="Montserrat, Arial Black",
-        font_size=88,
+        font_size=98,                  # Enlarged prominent virality size
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",  # Vibrant electric yellow active word pop
-        outline_width=6,
+        outline_width=7,
         max_words_per_screen=3,
         uppercase=True,                # ALL CAPS
-        position_margin_v=880,         # Squarely in the middle of the screen (away from bottom UI)
+        position_margin_v=980,         # Placed higher in upper-middle of vertical frame
     ),
     "podcast_shorts": CaptionStyle(
         name="podcast_shorts",
         font="Montserrat, Impact, Arial Black",
-        font_size=90,
+        font_size=100,                 # Extra bold size for podcast clips
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",  # Vibrant electric yellow active word pop
-        outline_width=6,
+        outline_width=7,
         max_words_per_screen=3,
         uppercase=True,                # ALL CAPS
-        position_margin_v=880,         # Middle of the screen
+        position_margin_v=980,         # Placed higher in upper-middle of vertical frame
     ),
     "reddit_longform": CaptionStyle(
         name="reddit_longform",
         font="Montserrat, Arial Black",
-        font_size=72,
+        font_size=76,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        outline_width=5,
+        outline_width=6,
         max_words_per_screen=6,
         uppercase=True,
-        position_margin_v=820,
+        position_margin_v=880,
     ),
     "hormozi_bold": CaptionStyle(
         name="hormozi_bold",
         font="Montserrat, Arial Black",
-        font_size=88,
+        font_size=98,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        outline_width=6,
+        outline_width=7,
         max_words_per_screen=3,
         uppercase=True,
-        position_margin_v=880,
+        position_margin_v=980,
     ),
     "anton_punchy": CaptionStyle(
         name="anton_punchy",
         font="Impact, Arial Black",
-        font_size=92,
+        font_size=102,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        outline_width=6,
+        outline_width=7,
         max_words_per_screen=3,
         uppercase=True,
-        position_margin_v=880,
+        position_margin_v=980,
     ),
     "poppins_soft": CaptionStyle(
         name="poppins_soft",
-        font="Montserrat, Arial Black",
-        font_size=80,
-        primary_color="&H00FFFFFF",
-        outline_color="&H00000000",
-        highlight_color="&H0000FFFF",
-        outline_width=5,
-        max_words_per_screen=4,
-        uppercase=True,
-        position_margin_v=880,
-    ),
-    "default": CaptionStyle(
-        name="default",
         font="Montserrat, Arial Black",
         font_size=88,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
         outline_width=6,
+        max_words_per_screen=4,
+        uppercase=True,
+        position_margin_v=980,
+    ),
+    "default": CaptionStyle(
+        name="default",
+        font="Montserrat, Arial Black",
+        font_size=98,
+        primary_color="&H00FFFFFF",
+        outline_color="&H00000000",
+        highlight_color="&H0000FFFF",
+        outline_width=7,
         max_words_per_screen=3,
         uppercase=True,
-        position_margin_v=880,
+        position_margin_v=980,
     ),
 }
 
