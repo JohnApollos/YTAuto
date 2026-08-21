@@ -25,6 +25,7 @@ export const JobsView: React.FC<JobsViewProps> = ({ jobs, onRefreshJobs, showToa
         j.id.toLowerCase().includes(query) ||
         j.type.toLowerCase().includes(query) ||
         j.trace_id.toLowerCase().includes(query) ||
+        (j.display_title && j.display_title.toLowerCase().includes(query)) ||
         (j.error && j.error.toLowerCase().includes(query));
       return matchesStatus && matchesQuery;
     });
@@ -172,10 +173,15 @@ export const JobsView: React.FC<JobsViewProps> = ({ jobs, onRefreshJobs, showToa
               {filteredJobs.map(j => (
                 <tr key={j.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                   <td style={{ padding: '14px 18px' }}>
-                    <div style={{ fontWeight: '600', color: '#f8fafc', textTransform: 'capitalize' }}>
+                    <div style={{ fontWeight: '700', color: '#f8fafc', textTransform: 'capitalize', fontSize: '0.92rem' }}>
                       {j.type.replace('_', ' ')}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>
+                    {j.display_title ? (
+                      <div style={{ fontWeight: '500', color: '#93c5fd', fontSize: '0.82rem', marginTop: '3px', maxWidth: '380px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={j.display_title}>
+                        {j.display_title}
+                      </div>
+                    ) : null}
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>
                       {j.trace_id}
                     </div>
                   </td>

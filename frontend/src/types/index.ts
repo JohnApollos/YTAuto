@@ -52,6 +52,7 @@ export interface Job {
   type: string;
   status: string;
   trace_id: string;
+  display_title?: string;
   attempts: number;
   max_attempts: number;
   error?: string;
@@ -133,6 +134,7 @@ export interface StageProfileEntry {
   stage: string;
   job_id: string;
   trace_id: string;
+  display_title?: string;
   duration_s: number;
   cpu_percent: number;
   start_ram_mb: number;

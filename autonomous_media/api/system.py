@@ -60,10 +60,14 @@ def get_models():
 
 
 @router.get("/resources")
-def get_system_resources():
+def get_system_resources(db: Session = Depends(get_db)):
     from autonomous_media.profiling import HardwareTelemetrySampler, stage_profiler
+    from autonomous_media.api.jobs import resolve_job_target_title
     snapshot = HardwareTelemetrySampler.get_system_snapshot()
-    snapshot["recent_profiles"] = stage_profiler.get_recent_profiles(limit=10)
+    raw_profiles = stage_profiler.get_recent_profiles(limit=10)
+    for p in raw_profiles:
+        p["display_title"] = resolve_job_target_title(db, {}, p.get("trace_id") or p.get("job_id"))
+    snapshot["recent_profiles"] = raw_profiles
     snapshot["stage_averages"] = stage_profiler.get_stage_averages()
     return snapshot
 

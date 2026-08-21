@@ -320,7 +320,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
                   <th style={{ padding: '8px 12px' }}>Stage</th>
-                  <th style={{ padding: '8px 12px' }}>Trace / Job ID</th>
+                  <th style={{ padding: '8px 12px' }}>Video / Target Item & Trace ID</th>
                   <th style={{ padding: '8px 12px' }}>Duration</th>
                   <th style={{ padding: '8px 12px' }}>Peak RAM</th>
                   <th style={{ padding: '8px 12px' }}>Peak VRAM</th>
@@ -329,13 +329,26 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {resources.recent_profiles.slice(0, 6).map(p => (
+                {resources.recent_profiles.slice(0, 8).map(p => (
                   <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                     <td style={{ padding: '10px 12px', fontWeight: '600', textTransform: 'capitalize' }}>
                       {p.stage.replace('_', ' ')}
                     </td>
-                    <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
-                      {p.trace_id || p.job_id || '-'}
+                    <td style={{ padding: '10px 12px' }}>
+                      {p.display_title ? (
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#f8fafc', fontSize: '0.84rem', maxWidth: '340px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {p.display_title}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', fontFamily: 'monospace', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            {p.trace_id || p.job_id || '-'}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                          {p.trace_id || p.job_id || '-'}
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '10px 12px', fontWeight: 'bold', color: '#93c5fd' }}>
                       {p.duration_s.toFixed(2)}s
