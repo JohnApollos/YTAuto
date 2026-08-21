@@ -98,7 +98,8 @@ class TranscriptionWorker(Worker):
                     extra={"trace_id": job.trace_id}
                 )
 
-                model = WhisperModel(model_name, device=device, compute_type=compute_type, cpu_threads=4)
+                threads = min(os.cpu_count() or 4, 8)
+                model = WhisperModel(model_name, device=device, compute_type=compute_type, cpu_threads=threads)
                 
                 # Update heartbeat before starting transcribe stream
                 job.last_heartbeat_at = datetime.now(timezone.utc)
@@ -108,15 +109,24 @@ class TranscriptionWorker(Worker):
                 
                 duration_val = int(getattr(info, "duration", 0) or 0)
                 logger.info(
-                    f"Transcription started (detected language='{getattr(info, 'language', 'en')}', duration={duration_val}s)",
+                    f"Transcription started (detected language='{getattr(info, 'language', 'en')}', duration={duration_val}s, threads={threads})",
                     extra={"trace_id": job.trace_id}
                 )
 
                 # Convert generator to list while logging progress
                 segments_list = []
+                last_logged_pct = 0
                 for seg in segments:
                     segments_list.append(seg)
                     job.last_heartbeat_at = datetime.now(timezone.utc)
+                    if duration_val > 0 and seg.end:
+                        pct = int((seg.end / duration_val) * 100)
+                        if pct >= last_logged_pct + 10:
+                            last_logged_pct = (pct // 10) * 10
+                            logger.info(
+                                f"Transcription progress: {last_logged_pct}% ({int(seg.end)}s / {duration_val}s)",
+                                extra={"trace_id": job.trace_id}
+                            )
                     session.commit()
                 
                 segments = segments_list
