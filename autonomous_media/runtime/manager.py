@@ -131,12 +131,14 @@ class StageModelManager:
         if fallback:
             self._fallbacks[stage] = fallback
 
-    def timeout_for(self, model_name: str) -> float:
-        """Return the configured per-model timeout, defaulting to 120s."""
-        return self.DEFAULT_TIMEOUTS.get(model_name, 120.0)
+    def timeout_for(self, stage_or_model: str) -> float:
+        """Return the configured per-stage or per-model timeout, defaulting to 30s."""
+        return self.DEFAULT_TIMEOUTS.get(stage_or_model, 30.0)
 
-    def _is_well_formed(self, result: InferenceResult) -> bool:
-        """Check that the result contains parseable JSON — basic schema validation."""
+    def _is_well_formed(self, result: InferenceResult, stage: str = "") -> bool:
+        """Check that the result contains parseable JSON or valid text for text stages."""
+        if stage in ("title", "description"):
+            return bool(result.text and result.text.strip())
         import json
         try:
             json.loads(result.text)
@@ -154,21 +156,22 @@ class StageModelManager:
                 logger.warning(f"Failed to unload {self._current.name}: {e}", extra={"trace_id": "runtime"})
 
     def _infer_with_retry(
-        self, model: ModelRuntime, request: InferenceRequest, max_attempts: int = 2
+        self, model: ModelRuntime, request: InferenceRequest, stage: str = "", max_attempts: int = 2
     ) -> InferenceResult:
         """Retry once at lower temperature on timeout/malformed output (spec §12.9)."""
         last_exc: Exception | None = None
+        timeout = self.DEFAULT_TIMEOUTS.get(stage, self.DEFAULT_TIMEOUTS.get(model.name, 30.0))
         for attempt in range(max_attempts):
             try:
-                result = model.infer(request, timeout_s=self.timeout_for(model.name))
-                if self._is_well_formed(result):
+                result = model.infer(request, timeout_s=timeout)
+                if self._is_well_formed(result, stage=stage):
                     return result
-                # Malformed JSON — retry with lower temperature
+                # Malformed output — retry with lower temperature
                 request = request.with_lower_temperature()
             except ModelTimeoutError as e:
                 last_exc = e
                 request = request.with_lower_temperature()
-        raise ModelTimeoutError(f"{model.name} failed after {max_attempts} attempts") from last_exc
+        raise ModelTimeoutError(f"{model.name} failed after {max_attempts} attempts for stage '{stage}'") from last_exc
 
     def run_stage(self, stage: str, request: InferenceRequest) -> InferenceResult:
         """
@@ -188,7 +191,7 @@ class StageModelManager:
             logger.info("model.loaded", extra={"trace_id": "runtime", "model": model.name, "stage": stage})
 
         try:
-            return self._infer_with_retry(model, request)
+            return self._infer_with_retry(model, request, stage=stage)
         except (ModelTimeoutError, MalformedOutputError):
             fallback = self._fallbacks.get(stage)
             if fallback is None:
@@ -198,10 +201,9 @@ class StageModelManager:
                 )
             logger.warning(
                 f"Primary model for '{stage}' failed; using fallback {fallback.name}",
-                extra={"trace_id": "runtime"},
+                extra={"trace_id": "runtime", "stage": stage, "fallback": fallback.name},
             )
-            fallback.load()
-            return fallback.infer(request, timeout_s=self.timeout_for(fallback.name))
+            return self._infer_with_retry(fallback, request, stage=stage)
 
     def health_check_all(self) -> dict[str, HealthStatus]:
         """Spec §12.9: backs the /system/models endpoint (§9.2)."""

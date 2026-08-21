@@ -142,6 +142,8 @@ class PublishingWorker(Worker):
             clip_words = [w for w in words if w["start_ms"] >= clip_candidate.start_ms and w["end_ms"] <= clip_candidate.end_ms]
             candidate_text = " ".join(w["word"] for w in clip_words) if clip_words else (source_video.title or "Clip")
 
+            candidate_snippet = " ".join(candidate_text.split()[:80])
+
             # A. Title generation
             prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")
             title_prompt_path = os.path.join(prompts_dir, "title_v1.txt")
@@ -149,8 +151,8 @@ class PublishingWorker(Worker):
                 with open(title_prompt_path, "r", encoding="utf-8") as f:
                     title_template = f.read()
                 recent_titles_str = ", ".join(channel.branding.get("recent_titles", ["Awesome short clip"]))
-                title_prompt = title_template.replace("{recent_titles}", recent_titles_str).replace("{candidate_text}", candidate_text)
-                title_res = stage_manager.run_stage("title", InferenceRequest(prompt=title_prompt))
+                title_prompt = title_template.replace("{recent_titles}", recent_titles_str).replace("{candidate_text}", candidate_snippet)
+                title_res = stage_manager.run_stage("title", InferenceRequest(prompt=title_prompt, max_tokens=100))
                 raw_t = title_res.text.strip().replace('"', '')
                 if raw_t.startswith("{") or "hook_strength" in raw_t:
                     video_title = f"Clip from: {source_video.title or 'Podcast'}"
@@ -164,8 +166,8 @@ class PublishingWorker(Worker):
             try:
                 with open(desc_prompt_path, "r", encoding="utf-8") as f:
                     desc_template = f.read()
-                desc_prompt = desc_template.replace("{candidate_text}", candidate_text)
-                desc_res = stage_manager.run_stage("description", InferenceRequest(prompt=desc_prompt))
+                desc_prompt = desc_template.replace("{candidate_text}", candidate_snippet)
+                desc_res = stage_manager.run_stage("description", InferenceRequest(prompt=desc_prompt, max_tokens=250))
                 desc_data = json.loads(desc_res.text) if desc_res.text.strip().startswith("{") else {}
                 desc_text = desc_data.get("description", "An amazing short clip.") if isinstance(desc_data, dict) else "An amazing short clip."
                 hashtags = " ".join(desc_data.get("hashtags", ["#shorts", "#podcast"])) if isinstance(desc_data, dict) else "#shorts #podcast"
