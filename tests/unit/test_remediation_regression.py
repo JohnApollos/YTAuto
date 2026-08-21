@@ -67,8 +67,8 @@ def test_render_captions_produces_valid_ass_tags(tmp_path: Path):
     assert "[Script Info]" in content
     assert "[V4+ Styles]" in content
     assert "Style: Default,Arial Black,98,&H00FFFFFF,&H0000FFFF,&H00000000" in content
-    # Assert 6-hex-digit yellow active word highlight tag is present (\c&H00FFFF&)
-    assert r"{\c&H00FFFF&}HELLO{\c&HFFFFFF&}" in content
+    # Assert yellow active word highlight and scale bounce tag is present (\c&H00FFFF&\fscx118\fscy118)
+    assert r"{\c&H00FFFF&\fscx118\fscy118}HELLO{\c&HFFFFFF&\fscx100\fscy100}" in content
 
 
 def test_unknown_voice_profile_raises_proper_exception():
@@ -176,10 +176,10 @@ def test_caption_presets_all_caps_and_middle_positioning():
     
     style = CaptionStyle.from_channel_config("reddit_shorts")
     assert style.uppercase is True
-    # Middle of the screen margin should be placed high (>= 900px)
-    assert style.position_margin_v >= 900
-    assert style.font_size >= 95
-    assert "Montserrat" in style.font or "Arial Black" in style.font
+    # Middle of the screen margin should be placed in the upper-middle visual focal zone (>= 800px)
+    assert style.position_margin_v >= 800
+    assert style.font_size >= 90
+    assert "Arial Black" in style.font
     assert style.outline_width >= 6
 
 

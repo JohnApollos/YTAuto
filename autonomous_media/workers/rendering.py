@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from autonomous_media.workers.base import Worker, JobResult
-from autonomous_media.db.models import Job, Clip, ClipCandidate, SourceVideo, BackgroundAsset, ContentSource, SourcePost
+from autonomous_media.db.models import Job, Clip, ClipCandidate, SourceVideo, BackgroundAsset, ContentSource, SourcePost, Channel
 from autonomous_media.storage import download_file, upload_file
 from autonomous_media.logging import get_logger, emit_event
 from autonomous_media.exceptions import StageUnrecoverableError

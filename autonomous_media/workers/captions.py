@@ -34,15 +34,15 @@ from pathlib import Path
 @dataclass(frozen=True)
 class CaptionStyle:
     name: str
-    font: str = "Montserrat, Arial Black"
-    font_size: int = 98
+    font: str = "Arial Black"
+    font_size: int = 92
     primary_color: str = "&H00FFFFFF"   # ASS format: &HAABBGGRR, white
     outline_color: str = "&H00000000"   # black
     highlight_color: str = "&H0000FFFF" # vibrant electric yellow
-    outline_width: int = 7              # thick crisp stroke for large typography
+    outline_width: int = 8              # thick crisp stroke for large typography
     max_words_per_screen: int = 3
     uppercase: bool = True              # strictly ALL CAPS
-    position_margin_v: int = 980        # placed higher in upper-middle of screen (55-60% height)
+    position_margin_v: int = 820        # placed higher in upper-middle of screen (58% height)
 
     @staticmethod
     def from_channel_config(preset_name: str) -> "CaptionStyle":
@@ -52,87 +52,87 @@ class CaptionStyle:
 CAPTION_PRESETS: dict[str, CaptionStyle] = {
     "reddit_shorts": CaptionStyle(
         name="reddit_shorts",
-        font="Montserrat, Arial Black",
-        font_size=98,                  # Enlarged prominent virality size
+        font="Arial Black",
+        font_size=92,                  # Enlarged prominent virality size
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",  # Vibrant electric yellow active word pop
-        outline_width=7,
+        outline_width=8,
         max_words_per_screen=3,
         uppercase=True,                # ALL CAPS
-        position_margin_v=980,         # Placed higher in upper-middle of vertical frame
+        position_margin_v=820,         # Placed higher in upper-middle of vertical frame
     ),
     "podcast_shorts": CaptionStyle(
         name="podcast_shorts",
-        font="Montserrat, Impact, Arial Black",
-        font_size=100,                 # Extra bold size for podcast clips
+        font="Arial Black",
+        font_size=94,                  # Extra bold size for podcast clips
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",  # Vibrant electric yellow active word pop
-        outline_width=7,
+        outline_width=8,
         max_words_per_screen=3,
         uppercase=True,                # ALL CAPS
-        position_margin_v=980,         # Placed higher in upper-middle of vertical frame
+        position_margin_v=820,         # Placed higher in upper-middle of vertical frame
     ),
     "reddit_longform": CaptionStyle(
         name="reddit_longform",
-        font="Montserrat, Arial Black",
+        font="Arial Black",
         font_size=76,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        outline_width=6,
+        outline_width=7,
         max_words_per_screen=6,
         uppercase=True,
-        position_margin_v=880,
+        position_margin_v=760,
     ),
     "hormozi_bold": CaptionStyle(
         name="hormozi_bold",
-        font="Montserrat, Arial Black",
-        font_size=98,
+        font="Arial Black",
+        font_size=94,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        outline_width=7,
+        outline_width=8,
         max_words_per_screen=3,
         uppercase=True,
-        position_margin_v=980,
+        position_margin_v=820,
     ),
     "anton_punchy": CaptionStyle(
         name="anton_punchy",
-        font="Impact, Arial Black",
-        font_size=102,
-        primary_color="&H00FFFFFF",
-        outline_color="&H00000000",
-        highlight_color="&H0000FFFF",
-        outline_width=7,
-        max_words_per_screen=3,
-        uppercase=True,
-        position_margin_v=980,
-    ),
-    "poppins_soft": CaptionStyle(
-        name="poppins_soft",
-        font="Montserrat, Arial Black",
-        font_size=88,
-        primary_color="&H00FFFFFF",
-        outline_color="&H00000000",
-        highlight_color="&H0000FFFF",
-        outline_width=6,
-        max_words_per_screen=4,
-        uppercase=True,
-        position_margin_v=980,
-    ),
-    "default": CaptionStyle(
-        name="default",
-        font="Montserrat, Arial Black",
+        font="Impact",
         font_size=98,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        outline_width=7,
+        outline_width=8,
         max_words_per_screen=3,
         uppercase=True,
-        position_margin_v=980,
+        position_margin_v=820,
+    ),
+    "poppins_soft": CaptionStyle(
+        name="poppins_soft",
+        font="Arial",
+        font_size=90,
+        primary_color="&H00FFFFFF",
+        outline_color="&H00000000",
+        highlight_color="&H0000FFFF",
+        outline_width=8,
+        max_words_per_screen=4,
+        uppercase=True,
+        position_margin_v=820,
+    ),
+    "default": CaptionStyle(
+        name="default",
+        font="Arial Black",
+        font_size=92,
+        primary_color="&H00FFFFFF",
+        outline_color="&H00000000",
+        highlight_color="&H0000FFFF",
+        outline_width=8,
+        max_words_per_screen=3,
+        uppercase=True,
+        position_margin_v=820,
     ),
 }
 
@@ -220,7 +220,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font},{font_size},{primary_color},{highlight_color},{outline_color},&H00000000,1,0,0,0,100,100,0,0,1,{outline_width},0,2,60,60,{margin_v},1
+Style: Default,{font},{font_size},{primary_color},{highlight_color},{outline_color},&H80000000,1,0,0,0,100,100,1,0,1,{outline_width},4,2,40,40,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -241,7 +241,7 @@ def render_captions(
     style: CaptionStyle,
     output_path: Path,
 ) -> Path:
-    """Writes a complete .ass subtitle file with per-word karaoke color highlighting."""
+    """Writes a complete .ass subtitle file with per-word karaoke color highlighting and scale bounce pop."""
     chunks = chunk_words_for_captions(word_timestamps, max_words=style.max_words_per_screen)
 
     header = _ASS_HEADER_TEMPLATE.format(
@@ -259,7 +259,7 @@ def render_captions(
         if not chunk:
             continue
         
-        # Emit line for each active word in chunk with color highlighting
+        # Emit line for each active word in chunk with color highlighting and scale pop
         for active_idx, active_word in enumerate(chunk):
             w_start = _fmt_timestamp(active_word.start_s)
             w_end = _fmt_timestamp(active_word.end_s if active_word.end_s > active_word.start_s else active_word.start_s + 0.3)
@@ -269,8 +269,8 @@ def render_captions(
                 raw_text = w.text.strip().upper() if style.uppercase else w.text.strip()
                 raw_text = raw_text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
                 if idx == active_idx:
-                    # Highlight active spoken word in vibrant yellow (\c&H00FFFF&) with bold pop
-                    formatted_words.append(f"{{\\c&H00FFFF&}}{raw_text}{{\\c&HFFFFFF&}}")
+                    # Highlight active spoken word in vibrant yellow (\c&H00FFFF&) with 118% scale pulse pop
+                    formatted_words.append(f"{{\\c&H00FFFF&\\fscx118\\fscy118}}{raw_text}{{\\c&HFFFFFF&\\fscx100\\fscy100}}")
                 else:
                     formatted_words.append(raw_text)
 

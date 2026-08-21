@@ -1,0 +1,95 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,98,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,0,2,60,60,820,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.12,Default,,0,0,0,,{\c&H00FFFF&}AM{\c&HFFFFFF&} I THE
+Dialogue: 0,0:00:00.12,0:00:00.28,Default,,0,0,0,,AM {\c&H00FFFF&}I{\c&HFFFFFF&} THE
+Dialogue: 0,0:00:00.28,0:00:00.44,Default,,0,0,0,,AM I {\c&H00FFFF&}THE{\c&HFFFFFF&}
+Dialogue: 0,0:00:00.44,0:00:00.70,Default,,0,0,0,,{\c&H00FFFF&}JERK{\c&HFFFFFF&} FOR REFUSING
+Dialogue: 0,0:00:00.70,0:00:00.96,Default,,0,0,0,,JERK {\c&H00FFFF&}FOR{\c&HFFFFFF&} REFUSING
+Dialogue: 0,0:00:00.96,0:00:01.34,Default,,0,0,0,,JERK FOR {\c&H00FFFF&}REFUSING{\c&HFFFFFF&}
+Dialogue: 0,0:00:01.34,0:00:01.76,Default,,0,0,0,,{\c&H00FFFF&}TO{\c&HFFFFFF&} PAY FOR
+Dialogue: 0,0:00:01.76,0:00:02.00,Default,,0,0,0,,TO {\c&H00FFFF&}PAY{\c&HFFFFFF&} FOR
+Dialogue: 0,0:00:02.00,0:00:02.32,Default,,0,0,0,,TO PAY {\c&H00FFFF&}FOR{\c&HFFFFFF&}
+Dialogue: 0,0:00:02.32,0:00:02.52,Default,,0,0,0,,{\c&H00FFFF&}MY{\c&HFFFFFF&} SISTER'S LUXURY
+Dialogue: 0,0:00:02.52,0:00:03.12,Default,,0,0,0,,MY {\c&H00FFFF&}SISTER'S{\c&HFFFFFF&} LUXURY
+Dialogue: 0,0:00:03.12,0:00:03.46,Default,,0,0,0,,MY SISTER'S {\c&H00FFFF&}LUXURY{\c&HFFFFFF&}
+Dialogue: 0,0:00:03.46,0:00:04.06,Default,,0,0,0,,{\c&H00FFFF&}DESTINATION{\c&HFFFFFF&} WEDDING?
+Dialogue: 0,0:00:04.06,0:00:04.62,Default,,0,0,0,,DESTINATION {\c&H00FFFF&}WEDDING?{\c&HFFFFFF&}
+Dialogue: 0,0:00:05.30,0:00:05.48,Default,,0,0,0,,{\c&H00FFFF&}MY{\c&HFFFFFF&} 28 -YEAR
+Dialogue: 0,0:00:05.48,0:00:06.12,Default,,0,0,0,,MY {\c&H00FFFF&}28{\c&HFFFFFF&} -YEAR
+Dialogue: 0,0:00:06.12,0:00:06.52,Default,,0,0,0,,MY 28 {\c&H00FFFF&}-YEAR{\c&HFFFFFF&}
+Dialogue: 0,0:00:06.52,0:00:06.80,Default,,0,0,0,,{\c&H00FFFF&}-OLD{\c&HFFFFFF&} SISTER IS
+Dialogue: 0,0:00:06.80,0:00:07.26,Default,,0,0,0,,-OLD {\c&H00FFFF&}SISTER{\c&HFFFFFF&} IS
+Dialogue: 0,0:00:07.26,0:00:07.64,Default,,0,0,0,,-OLD SISTER {\c&H00FFFF&}IS{\c&HFFFFFF&}
+Dialogue: 0,0:00:07.64,0:00:07.92,Default,,0,0,0,,{\c&H00FFFF&}GETTING{\c&HFFFFFF&} MARRIED IN
+Dialogue: 0,0:00:07.92,0:00:08.38,Default,,0,0,0,,GETTING {\c&H00FFFF&}MARRIED{\c&HFFFFFF&} IN
+Dialogue: 0,0:00:08.38,0:00:08.76,Default,,0,0,0,,GETTING MARRIED {\c&H00FFFF&}IN{\c&HFFFFFF&}
+Dialogue: 0,0:00:08.76,0:00:09.06,Default,,0,0,0,,{\c&H00FFFF&}ITALY{\c&HFFFFFF&} NEXT SUMMER.
+Dialogue: 0,0:00:09.06,0:00:09.40,Default,,0,0,0,,ITALY {\c&H00FFFF&}NEXT{\c&HFFFFFF&} SUMMER.
+Dialogue: 0,0:00:09.40,0:00:09.84,Default,,0,0,0,,ITALY NEXT {\c&H00FFFF&}SUMMER.{\c&HFFFFFF&}
+Dialogue: 0,0:00:10.36,0:00:10.64,Default,,0,0,0,,{\c&H00FFFF&}SHE{\c&HFFFFFF&} EXPECTED ME
+Dialogue: 0,0:00:10.64,0:00:11.12,Default,,0,0,0,,SHE {\c&H00FFFF&}EXPECTED{\c&HFFFFFF&} ME
+Dialogue: 0,0:00:11.12,0:00:11.42,Default,,0,0,0,,SHE EXPECTED {\c&H00FFFF&}ME{\c&HFFFFFF&}
+Dialogue: 0,0:00:11.42,0:00:11.64,Default,,0,0,0,,{\c&H00FFFF&}TO{\c&HFFFFFF&} PAY FOR
+Dialogue: 0,0:00:11.64,0:00:11.88,Default,,0,0,0,,TO {\c&H00FFFF&}PAY{\c&HFFFFFF&} FOR
+Dialogue: 0,0:00:11.88,0:00:12.14,Default,,0,0,0,,TO PAY {\c&H00FFFF&}FOR{\c&HFFFFFF&}
+Dialogue: 0,0:00:12.14,0:00:12.36,Default,,0,0,0,,{\c&H00FFFF&}HER{\c&HFFFFFF&} 0 -0
+Dialogue: 0,0:00:12.36,0:00:12.56,Default,,0,0,0,,HER {\c&H00FFFF&}0{\c&HFFFFFF&} -0
+Dialogue: 0,0:00:12.56,0:00:12.98,Default,,0,0,0,,HER 0 {\c&H00FFFF&}-0{\c&HFFFFFF&}
+Dialogue: 0,0:00:12.98,0:00:13.46,Default,,0,0,0,,{\c&H00FFFF&}-0{\c&HFFFFFF&} -0 VENUE
+Dialogue: 0,0:00:13.46,0:00:13.80,Default,,0,0,0,,-0 {\c&H00FFFF&}-0{\c&HFFFFFF&} VENUE
+Dialogue: 0,0:00:13.80,0:00:14.04,Default,,0,0,0,,-0 -0 {\c&H00FFFF&}VENUE{\c&HFFFFFF&}
+Dialogue: 0,0:00:14.04,0:00:14.48,Default,,0,0,0,,{\c&H00FFFF&}DEPOSIT{\c&HFFFFFF&} BECAUSE I
+Dialogue: 0,0:00:14.48,0:00:14.80,Default,,0,0,0,,DEPOSIT {\c&H00FFFF&}BECAUSE{\c&HFFFFFF&} I
+Dialogue: 0,0:00:14.80,0:00:15.06,Default,,0,0,0,,DEPOSIT BECAUSE {\c&H00FFFF&}I{\c&HFFFFFF&}
+Dialogue: 0,0:00:15.06,0:00:15.32,Default,,0,0,0,,{\c&H00FFFF&}WORK{\c&HFFFFFF&} IN SOFTWARE
+Dialogue: 0,0:00:15.32,0:00:15.66,Default,,0,0,0,,WORK {\c&H00FFFF&}IN{\c&HFFFFFF&} SOFTWARE
+Dialogue: 0,0:00:15.66,0:00:16.12,Default,,0,0,0,,WORK IN {\c&H00FFFF&}SOFTWARE{\c&HFFFFFF&}
+Dialogue: 0,0:00:16.12,0:00:16.72,Default,,0,0,0,,{\c&H00FFFF&}ENGINEERING.{\c&HFFFFFF&}
+Dialogue: 0,0:00:17.28,0:00:17.54,Default,,0,0,0,,{\c&H00FFFF&}WHEN{\c&HFFFFFF&} I POLITELY
+Dialogue: 0,0:00:17.54,0:00:17.74,Default,,0,0,0,,WHEN {\c&H00FFFF&}I{\c&HFFFFFF&} POLITELY
+Dialogue: 0,0:00:17.74,0:00:18.18,Default,,0,0,0,,WHEN I {\c&H00FFFF&}POLITELY{\c&HFFFFFF&}
+Dialogue: 0,0:00:18.18,0:00:18.68,Default,,0,0,0,,{\c&H00FFFF&}DECLINED{\c&HFFFFFF&} AND EXPLAINED
+Dialogue: 0,0:00:18.68,0:00:18.96,Default,,0,0,0,,DECLINED {\c&H00FFFF&}AND{\c&HFFFFFF&} EXPLAINED
+Dialogue: 0,0:00:18.96,0:00:19.34,Default,,0,0,0,,DECLINED AND {\c&H00FFFF&}EXPLAINED{\c&HFFFFFF&}
+Dialogue: 0,0:00:19.34,0:00:19.68,Default,,0,0,0,,{\c&H00FFFF&}MY{\c&HFFFFFF&} BUDGET, SHE
+Dialogue: 0,0:00:19.68,0:00:20.04,Default,,0,0,0,,MY {\c&H00FFFF&}BUDGET,{\c&HFFFFFF&} SHE
+Dialogue: 0,0:00:20.44,0:00:20.58,Default,,0,0,0,,MY BUDGET, {\c&H00FFFF&}SHE{\c&HFFFFFF&}
+Dialogue: 0,0:00:20.58,0:00:21.18,Default,,0,0,0,,{\c&H00FFFF&}UNINVITED{\c&HFFFFFF&} MY HUSBAND
+Dialogue: 0,0:00:21.18,0:00:21.44,Default,,0,0,0,,UNINVITED {\c&H00FFFF&}MY{\c&HFFFFFF&} HUSBAND
+Dialogue: 0,0:00:21.44,0:00:21.80,Default,,0,0,0,,UNINVITED MY {\c&H00FFFF&}HUSBAND{\c&HFFFFFF&}
+Dialogue: 0,0:00:21.80,0:00:22.12,Default,,0,0,0,,{\c&H00FFFF&}FROM{\c&HFFFFFF&} THE WEDDING
+Dialogue: 0,0:00:22.12,0:00:22.28,Default,,0,0,0,,FROM {\c&H00FFFF&}THE{\c&HFFFFFF&} WEDDING
+Dialogue: 0,0:00:22.28,0:00:22.50,Default,,0,0,0,,FROM THE {\c&H00FFFF&}WEDDING{\c&HFFFFFF&}
+Dialogue: 0,0:00:22.50,0:00:22.98,Default,,0,0,0,,{\c&H00FFFF&}PARTY.{\c&HFFFFFF&}
+Dialogue: 0,0:00:23.44,0:00:23.66,Default,,0,0,0,,{\c&H00FFFF&}NOW{\c&HFFFFFF&} MY PARENTS
+Dialogue: 0,0:00:23.66,0:00:23.88,Default,,0,0,0,,NOW {\c&H00FFFF&}MY{\c&HFFFFFF&} PARENTS
+Dialogue: 0,0:00:23.88,0:00:24.28,Default,,0,0,0,,NOW MY {\c&H00FFFF&}PARENTS{\c&HFFFFFF&}
+Dialogue: 0,0:00:24.28,0:00:24.64,Default,,0,0,0,,{\c&H00FFFF&}ARE{\c&HFFFFFF&} FURIOUS WITH
+Dialogue: 0,0:00:24.64,0:00:25.08,Default,,0,0,0,,ARE {\c&H00FFFF&}FURIOUS{\c&HFFFFFF&} WITH
+Dialogue: 0,0:00:25.08,0:00:25.42,Default,,0,0,0,,ARE FURIOUS {\c&H00FFFF&}WITH{\c&HFFFFFF&}
+Dialogue: 0,0:00:25.42,0:00:25.64,Default,,0,0,0,,{\c&H00FFFF&}ME,{\c&HFFFFFF&} CALLING ME
+Dialogue: 0,0:00:26.10,0:00:26.28,Default,,0,0,0,,ME, {\c&H00FFFF&}CALLING{\c&HFFFFFF&} ME
+Dialogue: 0,0:00:26.28,0:00:26.56,Default,,0,0,0,,ME, CALLING {\c&H00FFFF&}ME{\c&HFFFFFF&}
+Dialogue: 0,0:00:26.56,0:00:26.90,Default,,0,0,0,,{\c&H00FFFF&}SELFISH{\c&HFFFFFF&} AND REFUSING
+Dialogue: 0,0:00:26.90,0:00:27.24,Default,,0,0,0,,SELFISH {\c&H00FFFF&}AND{\c&HFFFFFF&} REFUSING
+Dialogue: 0,0:00:27.24,0:00:27.64,Default,,0,0,0,,SELFISH AND {\c&H00FFFF&}REFUSING{\c&HFFFFFF&}
+Dialogue: 0,0:00:27.64,0:00:28.08,Default,,0,0,0,,{\c&H00FFFF&}TO{\c&HFFFFFF&} SPEAK TO
+Dialogue: 0,0:00:28.08,0:00:28.34,Default,,0,0,0,,TO {\c&H00FFFF&}SPEAK{\c&HFFFFFF&} TO
+Dialogue: 0,0:00:28.34,0:00:28.62,Default,,0,0,0,,TO SPEAK {\c&H00FFFF&}TO{\c&HFFFFFF&}
+Dialogue: 0,0:00:28.62,0:00:28.84,Default,,0,0,0,,{\c&H00FFFF&}ME.{\c&HFFFFFF&}
+Dialogue: 0,0:00:28.84,0:00:29.44,Default,,0,0,0,,{\c&H00FFFF&}AM{\c&HFFFFFF&} I THE
+Dialogue: 0,0:00:29.44,0:00:29.64,Default,,0,0,0,,AM {\c&H00FFFF&}I{\c&HFFFFFF&} THE
+Dialogue: 0,0:00:29.64,0:00:29.76,Default,,0,0,0,,AM I {\c&H00FFFF&}THE{\c&HFFFFFF&}
+Dialogue: 0,0:00:29.76,0:00:30.04,Default,,0,0,0,,{\c&H00FFFF&}JERK{\c&HFFFFFF&} HERE?
+Dialogue: 0,0:00:30.04,0:00:30.38,Default,,0,0,0,,JERK {\c&H00FFFF&}HERE?{\c&HFFFFFF&}
