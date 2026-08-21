@@ -22,6 +22,47 @@ def sanitize_filename(name: str, max_length: int = 45) -> str:
     sanitized = re.sub(r'[\\/*?:"<>|]', "_", name).strip()
     return sanitized[:max_length].strip()
 
+
+def format_reddit_video_metadata(source_post, clip_dur: float) -> tuple[str, str]:
+    """Generates an engaging, high-CTR YouTube title and rich description with viral hashtags for Reddit Stories."""
+    raw_title = (source_post.title or "Unbelievable Reddit Story").strip()
+    
+    # Strip Reddit prefixes e.g. [AITA], (UPDATE), r/AITA -
+    clean_title = re.sub(r'\[.*?\]|\(.*?\)|^r/\w+\s*[-:]\s*', '', raw_title).strip()
+    clean_title = re.sub(r'\bAITA\b', 'Am I The Jerk', clean_title, flags=re.IGNORECASE)
+    clean_title = re.sub(r'\bWIBTA\b', 'Would I Be The Jerk', clean_title, flags=re.IGNORECASE)
+    clean_title = re.sub(r'\bTIFU\b', 'Today I Messed Up', clean_title, flags=re.IGNORECASE)
+    
+    # Trim title to ~80 chars max to keep it visible on mobile devices
+    if len(clean_title) > 80:
+        clean_title = clean_title[:77].rsplit(' ', 1)[0] + "..."
+
+    is_short = clip_dur <= 60
+    tag = "#Shorts" if is_short else "#RedditStories"
+    emoji = "🤔" if "?" in clean_title else "😳"
+    video_title = f"{clean_title} {emoji} {tag}"
+    if len(video_title) > 100:
+        video_title = video_title[:95] + "..."
+
+    # Format description with preview, attribution, and hashtag bundle
+    subreddit = getattr(source_post, "subreddit", None) or "RedditStories"
+    author = getattr(source_post, "author", None) or "Anonymous"
+    body = (source_post.body_text or "").strip()
+    preview = body[:280].rsplit(' ', 1)[0] + "..." if len(body) > 280 else body
+    hashtags = "#redditstories #reddit #storytime #askreddit #aita #redditreadings #shorts #viral #story" if is_short else "#redditstories #reddit #storytime #askreddit #aita #redditreadings #viral #story"
+    
+    video_description = (
+        f"{raw_title}\n\n"
+        f"📖 Story Preview:\n{preview}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📍 Subreddit: r/{subreddit}\n"
+        f"👤 Original Poster: u/{author}\n\n"
+        f"👉 Subscribe for daily Reddit stories, relationship drama, and AITA confessions!\n\n"
+        f"{hashtags}"
+    )
+    return video_title, video_description
+
+
 class PublishingWorker(Worker):
     job_type = 'publishing'
 
@@ -136,11 +177,10 @@ class PublishingWorker(Worker):
             if not source_post:
                 raise StageUnrecoverableError(f"SourcePost {clip.source_post_id} not found")
 
-            video_title = source_post.title
-            video_description = source_post.body_text
+            clip_dur = clip.duration_s if clip.duration_s else 0
+            video_title, video_description = format_reddit_video_metadata(source_post, clip_dur)
 
             # Classification by actual clip duration in seconds (<=60s is Short, >60s is Long-Form)
-            clip_dur = clip.duration_s if clip.duration_s else 0
             if clip_dur > 60:
                 export_subdir = os.path.join(export_root, "reddit_videos", "long_form")
             else:

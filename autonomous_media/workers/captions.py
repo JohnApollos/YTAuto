@@ -34,90 +34,105 @@ from pathlib import Path
 @dataclass(frozen=True)
 class CaptionStyle:
     name: str
-    font: str = "Arial Black"
-    font_size: int = 84
+    font: str = "Montserrat, Arial Black"
+    font_size: int = 88
     primary_color: str = "&H00FFFFFF"   # ASS format: &HAABBGGRR, white
     outline_color: str = "&H00000000"   # black
-    highlight_color: str = "&H0000FFFF" # yellow, used for the emphasized word if enabled
-    outline_width: int = 4
-    max_words_per_screen: int = 4
-    uppercase: bool = True
-    position_margin_v: int = 220        # vertical margin from the bottom, in pixels at 1080x1920
+    highlight_color: str = "&H0000FFFF" # vibrant electric yellow
+    outline_width: int = 6              # thick crisp stroke for readability
+    max_words_per_screen: int = 3
+    uppercase: bool = True              # strictly ALL CAPS for maximum virality
+    position_margin_v: int = 880        # positioned in the middle of the screen (50-55% height at 1080x1920)
 
     @staticmethod
     def from_channel_config(preset_name: str) -> "CaptionStyle":
-        return CAPTION_PRESETS.get(preset_name, CAPTION_PRESETS["hormozi_bold"])
+        return CAPTION_PRESETS.get(preset_name, CAPTION_PRESETS["reddit_shorts"])
 
 
 CAPTION_PRESETS: dict[str, CaptionStyle] = {
     "reddit_shorts": CaptionStyle(
         name="reddit_shorts",
-        font="Arial Black",
-        font_size=84,
+        font="Montserrat, Arial Black",
+        font_size=88,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
-        highlight_color="&H0000FFFF",  # Vibrant yellow active word pop
+        highlight_color="&H0000FFFF",  # Vibrant electric yellow active word pop
+        outline_width=6,
         max_words_per_screen=3,
-        uppercase=True,
-        position_margin_v=240,         # Clears YouTube Shorts UI buttons
+        uppercase=True,                # ALL CAPS
+        position_margin_v=880,         # Squarely in the middle of the screen (away from bottom UI)
     ),
     "podcast_shorts": CaptionStyle(
         name="podcast_shorts",
-        font="Impact",
+        font="Montserrat, Impact, Arial Black",
         font_size=90,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
-        highlight_color="&H0000FFFF",  # Vibrant yellow active word pop
+        highlight_color="&H0000FFFF",  # Vibrant electric yellow active word pop
+        outline_width=6,
         max_words_per_screen=3,
-        uppercase=True,
-        position_margin_v=240,         # Clears YouTube Shorts UI buttons
+        uppercase=True,                # ALL CAPS
+        position_margin_v=880,         # Middle of the screen
     ),
     "reddit_longform": CaptionStyle(
         name="reddit_longform",
-        font="Arial",
-        font_size=64,
+        font="Montserrat, Arial Black",
+        font_size=72,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        max_words_per_screen=9,         # Calmer, sentence-by-sentence max 2 lines
-        uppercase=False,
-        position_margin_v=120,
+        outline_width=5,
+        max_words_per_screen=6,
+        uppercase=True,
+        position_margin_v=820,
     ),
     "hormozi_bold": CaptionStyle(
         name="hormozi_bold",
-        font="Arial Black",
-        font_size=84,
+        font="Montserrat, Arial Black",
+        font_size=88,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        max_words_per_screen=4,
+        outline_width=6,
+        max_words_per_screen=3,
+        uppercase=True,
+        position_margin_v=880,
     ),
     "anton_punchy": CaptionStyle(
         name="anton_punchy",
-        font="Impact",
-        font_size=90,
+        font="Impact, Arial Black",
+        font_size=92,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
+        outline_width=6,
         max_words_per_screen=3,
+        uppercase=True,
+        position_margin_v=880,
     ),
     "poppins_soft": CaptionStyle(
         name="poppins_soft",
-        font="Arial",
-        font_size=76,
+        font="Montserrat, Arial Black",
+        font_size=80,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        max_words_per_screen=5,
+        outline_width=5,
+        max_words_per_screen=4,
+        uppercase=True,
+        position_margin_v=880,
     ),
     "default": CaptionStyle(
         name="default",
-        font="Arial Black",
-        font_size=84,
+        font="Montserrat, Arial Black",
+        font_size=88,
         primary_color="&H00FFFFFF",
         outline_color="&H00000000",
         highlight_color="&H0000FFFF",
-        max_words_per_screen=4,
+        outline_width=6,
+        max_words_per_screen=3,
+        uppercase=True,
+        position_margin_v=880,
     ),
 }
 

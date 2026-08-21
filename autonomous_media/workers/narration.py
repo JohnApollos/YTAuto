@@ -87,40 +87,61 @@ def validate_and_clean_narration_script(text: str | None, fallback_title: str, f
 
 
 def normalize_spoken_script(text: str) -> str:
-    """Normalizes Reddit abbreviations, age/gender tags, currencies, and units for realistic human narration."""
+    """Normalizes Reddit abbreviations, restores missing punctuation, injects speech prosody
+    pauses, and fixes phonetic pronunciation for lively, natural neural TTS narration.
+    """
     if not text:
         return text
 
-    # Remove markdown links [text](url) -> text, and standalone URLs
+    # 1. Remove markdown links, URLs, bullet formatting, and Reddit metadata tags
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
     text = re.sub(r'https?://\S+', '', text)
+    text = re.sub(r'[*_~`#^>|]', '', text)
+    text = re.sub(r'\[(?:deleted|removed)\]', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'^\s*[-•*]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\b(?:Edit|Update|Update \d+):\s*', '', text, flags=re.IGNORECASE)
 
-    # Strip markdown bold/italic formatting (*, **, ~~, `)
-    text = re.sub(r'[*_~`]', '', text)
+    # 2. Fix unpunctuated contractions for correct phonetic pronunciation
+    contraction_fixes = [
+        (r"\bdont\b", "don't"), (r"\bcant\b", "can't"), (r"\bwont\b", "won't"),
+        (r"\bdidnt\b", "didn't"), (r"\bcouldnt\b", "couldn't"), (r"\bshouldnt\b", "shouldn't"),
+        (r"\bwouldnt\b", "wouldn't"), (r"\bwasnt\b", "wasn't"), (r"\bisnt\b", "isn't"),
+        (r"\barent\b", "aren't"), (r"\bhavent\b", "haven't"), (r"\bhasnt\b", "hasn't"),
+        (r"\bim\b", "I'm"), (r"\bive\b", "I've"), (r"\bill\b", "I'll"),
+        (r"\byoure\b", "you're"), (r"\btheyre\b", "they're"), (r"\bweve\b", "we've"),
+        (r"\bthats\b", "that's"), (r"\bwhats\b", "what's"), (r"\bhows\b", "how's"),
+        (r"\bwhos\b", "who's"), (r"\btheres\b", "there's"), (r"\blets\b", "let's"),
+    ]
+    for pattern, repl in contraction_fixes:
+        text = re.sub(pattern, repl, text, flags=re.IGNORECASE)
 
-    # Common Reddit & Relationship abbreviations
+    # 3. Expand Reddit acronyms into spoken conversational English with proper intonation
     text = re.sub(r'\bAITA\b', 'Am I the jerk', text, flags=re.IGNORECASE)
     text = re.sub(r'\bWIBTA\b', 'Would I be the jerk', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bTIFU\b', 'Today I messed up', text, flags=re.IGNORECASE)
     text = re.sub(r'\bNTA\b', 'Not the jerk', text, flags=re.IGNORECASE)
     text = re.sub(r'\bYTA\b', 'You are the jerk', text, flags=re.IGNORECASE)
     text = re.sub(r'\bESH\b', 'Everyone is wrong here', text, flags=re.IGNORECASE)
     text = re.sub(r'\bNAH\b', 'No jerks here', text, flags=re.IGNORECASE)
     text = re.sub(r'\bTL;?DR\b', "Too long, didn't read:", text, flags=re.IGNORECASE)
+    text = re.sub(r'\bPOV\b', 'Point of view:', text, flags=re.IGNORECASE)
 
-    # Family & relationship acronyms
-    text = re.sub(r'\bMIL\b', 'mother in law', text)
-    text = re.sub(r'\bFIL\b', 'father in law', text)
-    text = re.sub(r'\bSIL\b', 'sister in law', text)
-    text = re.sub(r'\bBIL\b', 'brother in law', text)
-    text = re.sub(r'\bDH\b', 'dear husband', text)
-    text = re.sub(r'\bDW\b', 'dear wife', text)
-    text = re.sub(r'\bSO\b', 'significant other', text)
+    # 4. Family & relationship terminology
+    text = re.sub(r'\bMIL\b', 'mother-in-law', text)
+    text = re.sub(r'\bFIL\b', 'father-in-law', text)
+    text = re.sub(r'\bSIL\b', 'sister-in-law', text)
+    text = re.sub(r'\bBIL\b', 'brother-in-law', text)
+    text = re.sub(r'\bDH\b', 'husband', text)
+    text = re.sub(r'\bDW\b', 'wife', text)
+    text = re.sub(r'\bSO\b', 'partner', text)
+    text = re.sub(r'\bSTBX\b', 'soon-to-be ex', text, flags=re.IGNORECASE)
     text = re.sub(r'\bOP\b', 'original poster', text)
     text = re.sub(r'\bOOP\b', 'original poster', text)
     text = re.sub(r'\bbf\b', 'boyfriend', text, flags=re.IGNORECASE)
     text = re.sub(r'\bgf\b', 'girlfriend', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bex\b', 'ex-partner', text, flags=re.IGNORECASE)
 
-    # Internet slang & abbreviations
+    # 5. Internet slang & conversational shorthand
     text = re.sub(r'\bimo\b', 'in my opinion', text, flags=re.IGNORECASE)
     text = re.sub(r'\bimho\b', 'in my honest opinion', text, flags=re.IGNORECASE)
     text = re.sub(r'\btbh\b', 'to be honest', text, flags=re.IGNORECASE)
@@ -134,13 +155,13 @@ def normalize_spoken_script(text: str) -> str:
     text = re.sub(r'\baka\b', 'also known as', text, flags=re.IGNORECASE)
     text = re.sub(r'\bw/\b', 'with ', text, flags=re.IGNORECASE)
     text = re.sub(r'\bw/o\b', 'without ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bpm\b', 'private message', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bdm\b', 'direct message', text, flags=re.IGNORECASE)
 
-    # Age and gender tags: e.g. 21M, 25F, (21M), [25F] -> 21 male, 25 female
+    # 6. Demographics, units & financial expansions
     text = re.sub(r'\(?\b(\d{1,2})\s*M\b\)?', r'\1 male', text)
     text = re.sub(r'\(?\b(\d{1,2})\s*F\b\)?', r'\1 female', text)
     text = re.sub(r'\b(\d{1,2})\s*yo\b', r'\1 year old', text, flags=re.IGNORECASE)
-
-    # Currencies & numbers
     text = re.sub(r'\$(\d+(?:\.\d+)?)\s*k\b', r'\1 thousand dollars', text, flags=re.IGNORECASE)
     text = re.sub(r'\$(\d+(?:\.\d+)?)\s*m\b', r'\1 million dollars', text, flags=re.IGNORECASE)
     text = re.sub(r'\$(\d+(?:\.\d+)?)', r'\1 dollars', text)
@@ -149,20 +170,67 @@ def normalize_spoken_script(text: str) -> str:
     text = re.sub(r'\b(\d+)%', r'\1 percent', text)
     text = re.sub(r'#(\d+)', r'number \1', text)
 
-    # Units & metrics
-    text = re.sub(r'\b(\d+)\s*km\b', r'\1 kilometers', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*mph\b', r'\1 miles per hour', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*kg\b', r'\1 kilograms', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*lbs?\b', r'\1 pounds', text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(\d+)\s*ft\b', r'\1 feet', text, flags=re.IGNORECASE)
-
-    # Strip emojis and non-verbal unicode symbols
+    # Strip emojis and non-verbal unicode
     text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
 
-    # Punctuation & prosody polish
-    text = text.replace('...', ', ').replace('  ', ' ')
+    # 7. Intelligent Punctuation & Speech Prosody Injection
+    # Replace run-on ellipsis and weird dashes with natural pauses
+    text = text.replace('...', ', ').replace('..', '. ').replace('--', ', ')
+    text = re.sub(r'\s*;\s*', ', ', text)
+    text = re.sub(r'\s*:\s*', ': ', text)
+
+    # Insert breath commas before major narrative conjunctions in long sentences
+    conjunction_patterns = [
+        (r'(\w+)\s+(but then|and then|so then|which made me|even though|although)\s+', r'\1, \2 '),
+        (r'(\w{4,})\s+(however|furthermore|meanwhile|eventually|suddenly)\s+', r'\1, \2, '),
+    ]
+    for pattern, repl in conjunction_patterns:
+        text = re.sub(pattern, repl, text, flags=re.IGNORECASE)
+
+    # Ensure dialogue tags have proper comma pauses
+    text = re.sub(r'\b(he said|she said|I said|they said|he replied|she replied)\s+', r'\1, ', text, flags=re.IGNORECASE)
+
+    # 8. Sentence Cadence and Question Mark Inflection
+    # Split text into paragraphs and lines, ensuring proper terminal punctuation
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    processed_lines = []
+    
+    interrogative_starters = (
+        'am i', 'would i', 'why did', 'why does', 'why would', 'why is', 'why are',
+        'how could', 'how did', 'how do', 'what should', 'what did', 'what would',
+        'who was', 'where did', 'is it wrong', 'should i', 'did i'
+    )
+
+    for line in lines:
+        if not line:
+            continue
+        # Ensure first letter is capitalized
+        line = line[0].upper() + line[1:] if len(line) > 1 else line.upper()
+
+        # If line lacks terminal punctuation, determine if it is a question or statement
+        if not line.endswith(('.', '?', '!', ':', ',')):
+            lower_line = line.lower()
+            if any(lower_line.startswith(starter) for starter in interrogative_starters):
+                line += '?'
+            else:
+                line += '.'
+        elif line.endswith('.'):
+            # Check if line was phrased as a question but punctuated with a period
+            lower_line = line.lower()
+            if any(lower_line.startswith(starter) for starter in interrogative_starters):
+                line = line[:-1] + '?'
+
+        processed_lines.append(line)
+
+    text = '\n\n'.join(processed_lines)
+
+    # Clean double commas, weird spaces, and excessive punctuation
+    text = re.sub(r',\s*,+', ',', text)
+    text = re.sub(r'\.\s*\.+', '.', text)
     text = re.sub(r'\?{2,}', '?', text)
     text = re.sub(r'!{2,}', '!', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+
     return text.strip()
 
 

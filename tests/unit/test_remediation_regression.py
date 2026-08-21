@@ -42,8 +42,8 @@ def test_normalize_spoken_script_reddit_slang_and_relationships():
 
     assert "Am I the jerk" in normalized
     assert "21 male" in normalized
-    assert "mother in law" in normalized
-    assert "sister in law" in normalized
+    assert "mother-in-law" in normalized
+    assert "sister-in-law" in normalized
     assert "50 thousand dollars" in normalized
     assert "Would I be the jerk" in normalized
     assert "boyfriend" in normalized
@@ -57,7 +57,7 @@ def test_render_captions_produces_valid_ass_tags(tmp_path: Path):
         WordTimestamp(text="Hello", start_s=0.0, end_s=0.5),
         WordTimestamp(text="world", start_s=0.5, end_s=1.0),
     ]
-    style = CaptionStyle(name="test_style", font="Arial Black")
+    style = CaptionStyle(name="test_style", font="Arial Black", font_size=88)
     out_ass = tmp_path / "captions.ass"
 
     render_captions(timestamps, style, out_ass)
@@ -66,7 +66,7 @@ def test_render_captions_produces_valid_ass_tags(tmp_path: Path):
     content = out_ass.read_text(encoding="utf-8")
     assert "[Script Info]" in content
     assert "[V4+ Styles]" in content
-    assert "Style: Default,Arial Black,84,&H00FFFFFF,&H0000FFFF,&H00000000" in content
+    assert "Style: Default,Arial Black,88,&H00FFFFFF,&H0000FFFF,&H00000000" in content
     # Assert 6-hex-digit yellow active word highlight tag is present (\c&H00FFFF&)
     assert r"{\c&H00FFFF&}HELLO{\c&HFFFFFF&}" in content
 
@@ -169,6 +169,51 @@ def test_coexistence_governor_decision_endpoint():
         assert "reason" in decision
         assert "max_concurrent_agents" in decision
         assert "allow_browser_automation" in decision
+
+
+def test_caption_presets_all_caps_and_middle_positioning():
+    from autonomous_media.workers.captions import CaptionStyle, CAPTION_PRESETS
+    
+    style = CaptionStyle.from_channel_config("reddit_shorts")
+    assert style.uppercase is True
+    # Middle of the screen margin should be elevated (> 800px)
+    assert style.position_margin_v >= 800
+    assert "Montserrat" in style.font or "Arial Black" in style.font
+    assert style.outline_width >= 5
+
+
+def test_normalize_spoken_script_smart_punctuation_and_intonation():
+    from autonomous_media.workers.narration import normalize_spoken_script
+
+    raw_text = "AITA for leaving my MIL at the airport because she told me to shut up and didnt apologize"
+    cleaned = normalize_spoken_script(raw_text)
+    
+    # Check question mark inflection added
+    assert cleaned.endswith("?")
+    assert "Am I the jerk" in cleaned
+    assert "mother-in-law" in cleaned
+    assert "didn't" in cleaned
+    assert "because" in cleaned
+
+
+def test_format_reddit_video_metadata():
+    from autonomous_media.workers.publishing import format_reddit_video_metadata
+    from autonomous_media.db.models import SourcePost
+
+    post = SourcePost(
+        title="[AITA] My wife spent our savings on a luxury handbag without telling me",
+        body_text="I was shocked when I opened my bank account and saw a charge for 5000 dollars.",
+        subreddit="AmItheAsshole",
+        author="confused_husband"
+    )
+
+    title, desc = format_reddit_video_metadata(post, clip_dur=45.0)
+    assert "#Shorts" in title
+    assert "Am I The Jerk" in title or "savings" in title
+    assert "#redditstories" in desc
+    assert "r/AmItheAsshole" in desc
+    assert "u/confused_husband" in desc
+
 
 
 
