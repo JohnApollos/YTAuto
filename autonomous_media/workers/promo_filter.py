@@ -40,7 +40,37 @@ PROMO_MARKERS = [
     "our sponsor",
     "today's sponsor",
     "use my code",
-    "head to",  # common ad-read lead-in ("head to squarespace.com/...")
+    "head to",
+    "sign up at",
+    "free trial",
+    "money-back guarantee",
+    "free shipping",
+    "shipping is free",
+    "use promo code",
+    "special discount",
+    # Common podcast sponsors
+    "betterhelp",
+    "athletic greens",
+    "ag1",
+    "expressvpn",
+    "nordvpn",
+    "surfshark",
+    "squarespace",
+    "shopify",
+    "helix sleep",
+    "factor meals",
+    "manscaped",
+    "hellofresh",
+    "stamps.com",
+    "ziprecruiter",
+    "draftkings",
+    "gametime",
+]
+
+SUSPICIOUS_CUES = [
+    ".com", ".co", ".org", ".io", ".net", "special offer", "exclusive deal",
+    "dollars off", "limited time", "checkout using", "code at", "trial period",
+    "sponsor", "partnership"
 ]
 
 
@@ -60,6 +90,11 @@ class TranscriptWindow:
 def heuristic_promo_flag(window_text: str) -> bool:
     lowered = window_text.lower()
     return any(marker in lowered for marker in PROMO_MARKERS)
+
+
+def is_suspicious_borderline(window_text: str) -> bool:
+    lowered = window_text.lower()
+    return any(cue in lowered for cue in SUSPICIOUS_CUES)
 
 
 def build_sliding_windows(
@@ -103,7 +138,7 @@ def build_sliding_windows(
 def _llm_classify_batch(
     windows: list[TranscriptWindow],
     model_manager,
-    batch_size: int = 15,
+    batch_size: int = 10,
 ) -> list[TranscriptWindow]:
     """Classifies windows that didn't trip the heuristic filter. Batched
     for the same reason clip scoring is batched (spec section 11.1) --
@@ -162,7 +197,9 @@ def detect_promo_segments(
     windows = build_sliding_windows(words)
     heuristic_hits = [w for w in windows if heuristic_promo_flag(w.text)]
     heuristic_hit_ids = {id(w) for w in heuristic_hits}
-    borderline = [w for w in windows if id(w) not in heuristic_hit_ids]
+    
+    # Selective borderline check: only scan windows with suspicious secondary cues, max 5 windows
+    borderline = [w for w in windows if id(w) not in heuristic_hit_ids and is_suspicious_borderline(w.text)][:5]
 
     llm_hits = []
     if model_manager is not None and borderline:
