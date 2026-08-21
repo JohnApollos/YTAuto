@@ -209,11 +209,24 @@ def test_format_reddit_video_metadata():
     )
 
     title, desc = format_reddit_video_metadata(post, clip_dur=45.0)
+    assert len(title) <= 100
     assert "#Shorts" in title
     assert "Am I The Jerk" in title or "savings" in title
     assert "#redditstories" in desc
     assert "r/AmItheAsshole" in desc
     assert "u/confused_husband" in desc
+
+    # Test with a massive 300-character Reddit title
+    long_post = SourcePost(
+        title="AITA for refusing to give my entire life savings of fifty thousand dollars to my estranged stepbrother who never spoke to me for twenty years until he found out I bought a new house in the suburbs and now my whole family is blowing up my phone telling me that I am a selfish monster who ruined Christmas?",
+        body_text="Here is the long story...",
+        subreddit="AmItheAsshole",
+        author="op_poster"
+    )
+    long_title, long_desc = format_reddit_video_metadata(long_post, clip_dur=55.0)
+    assert len(long_title) <= 100
+    assert long_title.endswith("#Shorts")
+
 
 
 

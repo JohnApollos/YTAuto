@@ -24,27 +24,32 @@ def sanitize_filename(name: str, max_length: int = 45) -> str:
 
 
 def format_reddit_video_metadata(source_post, clip_dur: float) -> tuple[str, str]:
-    """Generates an engaging, high-CTR YouTube title and rich description with viral hashtags for Reddit Stories."""
+    """Generates an engaging, high-CTR YouTube title (strictly < 100 chars) and rich description with viral hashtags for Reddit Stories."""
     raw_title = (source_post.title or "Unbelievable Reddit Story").strip()
     
-    # Strip Reddit prefixes e.g. [AITA], (UPDATE), r/AITA -
+    # 1. Clean Reddit prefixes e.g. [AITA], (UPDATE), r/AITA -
     clean_title = re.sub(r'\[.*?\]|\(.*?\)|^r/\w+\s*[-:]\s*', '', raw_title).strip()
     clean_title = re.sub(r'\bAITA\b', 'Am I The Jerk', clean_title, flags=re.IGNORECASE)
     clean_title = re.sub(r'\bWIBTA\b', 'Would I Be The Jerk', clean_title, flags=re.IGNORECASE)
     clean_title = re.sub(r'\bTIFU\b', 'Today I Messed Up', clean_title, flags=re.IGNORECASE)
     
-    # Trim title to ~80 chars max to keep it visible on mobile devices
-    if len(clean_title) > 80:
-        clean_title = clean_title[:77].rsplit(' ', 1)[0] + "..."
-
     is_short = clip_dur <= 60
     tag = "#Shorts" if is_short else "#RedditStories"
     emoji = "🤔" if "?" in clean_title else "😳"
-    video_title = f"{clean_title} {emoji} {tag}"
+    
+    # YouTube has a strict 100-character ceiling for video titles.
+    # Allocate budget for title + emoji + hashtag
+    max_body_len = 100 - len(tag) - len(emoji) - 3  # ~83 chars
+    if len(clean_title) > max_body_len:
+        clean_title = clean_title[:max_body_len - 3].rsplit(' ', 1)[0] + "..."
+
+    video_title = f"{clean_title} {emoji} {tag}".strip()
+    
+    # Hard clamp to guarantee len <= 100
     if len(video_title) > 100:
         video_title = video_title[:95] + "..."
 
-    # Format description with preview, attribution, and hashtag bundle
+    # 2. Format description with hook preview, attribution, call to action, and viral hashtags
     subreddit = getattr(source_post, "subreddit", None) or "RedditStories"
     author = getattr(source_post, "author", None) or "Anonymous"
     body = (source_post.body_text or "").strip()
