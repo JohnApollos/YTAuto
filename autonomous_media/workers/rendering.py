@@ -37,15 +37,20 @@ class RenderingWorker(Worker):
 
     def process(self, session: Session, job: Job) -> JobResult:
         clip_id = job.payload.get("clip_id")
-        ass_storage_key = job.payload.get("ass_storage_key")
-        source_post_id = job.payload.get("source_post_id")
-
         if not clip_id:
             raise StageUnrecoverableError("Missing clip_id in job payload")
 
         clip = session.query(Clip).filter(Clip.id == uuid.UUID(clip_id) if isinstance(clip_id, str) else clip_id).first()
         if not clip:
             raise StageUnrecoverableError(f"Clip {clip_id} not found")
+
+        source_post_id = job.payload.get("source_post_id") or (str(clip.source_post_id) if clip.source_post_id else None)
+        ass_storage_key = job.payload.get("ass_storage_key")
+        if not ass_storage_key:
+            if source_post_id:
+                ass_storage_key = f"subtitles/story-{source_post_id}.ass"
+            elif clip.clip_candidate_id:
+                ass_storage_key = f"subtitles/{clip.clip_candidate_id}.ass"
 
         logger.info(
             f"Starting rendering for Clip {clip_id}",
