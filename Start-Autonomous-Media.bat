@@ -64,6 +64,7 @@ docker compose up -d
 if errorlevel 1 (
     echo       WARNING: docker compose encountered an issue. Check container logs.
 )
+timeout /t 3 /nobreak >NUL
 echo       Container services are running.
 echo.
 
