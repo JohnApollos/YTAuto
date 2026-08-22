@@ -41,6 +41,8 @@ class StoryResponse(BaseModel):
     id: str
     status: str
     title: str
+    subreddit: Optional[str] = None
+    author: Optional[str] = None
     submitted_at: str
 
 
@@ -154,6 +156,8 @@ def submit_story(
         id=str(post_id),
         status=post.status,
         title=post.title,
+        subreddit=post.subreddit or "RedditStories",
+        author=post.author or "Anonymous",
         submitted_at=post.submitted_at.isoformat(),
     )
 
@@ -177,6 +181,8 @@ def list_stories(
             id=str(p.id),
             status=p.status,
             title=p.title,
+            subreddit=p.subreddit or "RedditStories",
+            author=p.author or "Anonymous",
             submitted_at=p.submitted_at.isoformat() if p.submitted_at else "",
         )
         for p in posts

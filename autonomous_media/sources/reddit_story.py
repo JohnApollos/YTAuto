@@ -63,7 +63,7 @@ class RedditStorySource:
     min_upvote_ratio: float = 0.85
     min_words: int = 90
     max_words: int = 350
-    max_new_items: int = 1
+    max_new_items: int = 3
 
     def _get_oauth_token(self) -> str | None:
         """Fetch OAuth bearer token if client credentials are configured."""
@@ -115,9 +115,6 @@ class RedditStorySource:
                     # 1. Post ID and Link
                     id_elem = e.find("atom:id", ns)
                     post_id = id_elem.text.split("/")[-1] if id_elem is not None and id_elem.text else ""
-                    if not post_id or post_id in existing_ids:
-                        continue
-
                     link_elem = e.find("atom:link", ns)
                     permalink = link_elem.attrib.get("href", f"https://www.reddit.com/r/{subreddit}") if link_elem is not None else f"https://www.reddit.com/r/{subreddit}"
 
@@ -125,6 +122,14 @@ class RedditStorySource:
                     title_elem = e.find("atom:title", ns)
                     raw_title = html.unescape(title_elem.text or "").strip() if title_elem is not None else ""
                     if not raw_title:
+                        continue
+
+                    # Deduplication check across post_id, permalink URL, and title
+                    if (
+                        (post_id and post_id in existing_ids)
+                        or (permalink and permalink in existing_ids)
+                        or (raw_title and raw_title.lower() in existing_ids)
+                    ):
                         continue
 
                     author_elem = e.find("atom:author/atom:name", ns)
@@ -213,15 +218,21 @@ class RedditStorySource:
                 for p in posts:
                     post_data = p.get("data", {})
                     post_id = post_data.get("id")
-                    if not post_id or post_id in existing_ids:
+                    permalink = f"https://www.reddit.com{post_data.get('permalink', '')}"
+                    raw_title = (post_data.get("title") or "").strip()
+                    raw_body = (post_data.get("selftext") or "").strip()
+
+                    if (
+                        (post_id and post_id in existing_ids)
+                        or (permalink and permalink in existing_ids)
+                        or (raw_title and raw_title.lower() in existing_ids)
+                    ):
+                        continue
+
+                    if not raw_title or not raw_body:
                         continue
 
                     if post_data.get("over_18", False):
-                        continue
-
-                    raw_title = (post_data.get("title") or "").strip()
-                    raw_body = (post_data.get("selftext") or "").strip()
-                    if not raw_title or not raw_body:
                         continue
 
                     combined_lower = f"{raw_title} {raw_body}".lower()

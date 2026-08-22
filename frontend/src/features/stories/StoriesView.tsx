@@ -22,11 +22,11 @@ export const StoriesView: React.FC<StoriesViewProps> = ({
   showToast
 }) => {
   const [submitting, setSubmitting] = useState(false);
-  const [voiceProfile, setVoiceProfile] = useState('narrator_neutral_v1');
+  const [voiceProfile, setVoiceProfile] = useState('auto');
   const [newStory, setNewStory] = useState({
     title: '',
     body_text: '',
-    subreddit: 'r/AskReddit',
+    subreddit: '',
     author: ''
   });
 
@@ -67,15 +67,19 @@ export const StoriesView: React.FC<StoriesViewProps> = ({
 
     setSubmitting(true);
     try {
+      const formattedSubreddit = newStory.subreddit.trim()
+        ? (newStory.subreddit.trim().startsWith('r/') ? newStory.subreddit.trim() : `r/${newStory.subreddit.trim()}`)
+        : undefined;
+
       await api.submitCuratedStory({
         title: newStory.title.trim(),
         body_text: newStory.body_text.trim(),
-        subreddit: newStory.subreddit || 'r/AskReddit',
-        author: newStory.author || undefined,
+        subreddit: formattedSubreddit,
+        author: newStory.author.trim() || undefined,
         channel_id: selectedChannelId || undefined
       });
       showToast('Story submitted! Autonomous voice & caption pipeline launched.', 'success');
-      setNewStory({ title: '', body_text: '', subreddit: 'r/AskReddit', author: '' });
+      setNewStory({ title: '', body_text: '', subreddit: '', author: '' });
       onRefreshStories();
     } catch (err: any) {
       showToast(err.message || 'Failed to submit story', 'danger');
@@ -189,6 +193,7 @@ export const StoriesView: React.FC<StoriesViewProps> = ({
                   onChange={e => setVoiceProfile(e.target.value)} 
                   className="input"
                 >
+                  <option value="auto">🤖 Automatic AI Matching (Analyzes Gender & Tone)</option>
                   <option value="narrator_neutral_v1">🎙️ Lessac High (Neutral Documentary)</option>
                   <option value="motivational_male_v1">🎙️ Ryan High (Energetic Male)</option>
                   <option value="warm_female_v1">🎙️ Amy Medium (Warm Female Storyteller)</option>
@@ -243,12 +248,12 @@ export const StoriesView: React.FC<StoriesViewProps> = ({
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Subreddit</label>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Subreddit (Optional)</label>
                 <input 
                   className="input" 
                   value={newStory.subreddit}
                   onChange={e => setNewStory({ ...newStory, subreddit: e.target.value })}
-                  placeholder="r/AskReddit, r/AITA"
+                  placeholder="e.g. r/AmItheAsshole, r/relationship_advice"
                 />
               </div>
               <div>
@@ -289,8 +294,11 @@ export const StoriesView: React.FC<StoriesViewProps> = ({
                     <div style={{ fontWeight: '600', fontSize: '0.92rem', color: '#f8fafc' }}>{s.title}</div>
                     <Badge status={s.status === 'ready' ? 'succeeded' : s.status} />
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                    {s.subreddit || 'r/AskReddit'} {s.author ? `• by ${s.author}` : ''}
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                      {s.subreddit ? (s.subreddit.startsWith('r/') ? s.subreddit : `r/${s.subreddit}`) : 'r/RedditStories'}
+                    </span>
+                    <span>{s.author ? `by ${s.author.startsWith('u/') ? s.author : `u/${s.author}`}` : 'Anonymous'}</span>
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', lineClamp: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {s.body_text}

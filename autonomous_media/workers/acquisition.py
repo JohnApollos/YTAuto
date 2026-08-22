@@ -37,28 +37,44 @@ class AcquisitionWorker(Worker):
             from autonomous_media.sources.reddit_story import RedditStorySource, CURATED_SUBREDDITS
             from autonomous_media.db.models import SourcePost
 
-            existing_posts = session.query(SourcePost.source_url).filter(
-                SourcePost.content_source_id == source_id
-            ).all()
-            existing_urls = {p[0] for p in existing_posts if p[0]}
+            existing_posts = session.query(SourcePost).all()
+            existing_ids = set()
+            for p in existing_posts:
+                if p.source_url:
+                    existing_ids.add(p.source_url)
+                    parts = p.source_url.rstrip('/').split('/')
+                    for part in parts:
+                        if len(part) in (6, 7, 8, 9) and part.isalnum():
+                            existing_ids.add(part)
+                if p.title:
+                    existing_ids.add(p.title.strip().lower())
 
             configured_subreddits = content_source.config.get("subreddits") or list(CURATED_SUBREDDITS)
+            max_new = content_source.config.get("max_new_videos_per_poll", 3)
             reddit_source = RedditStorySource(
                 subreddits=configured_subreddits,
                 min_upvotes=content_source.config.get("min_upvotes", 300),
                 min_upvote_ratio=content_source.config.get("min_upvote_ratio", 0.85),
                 min_words=content_source.config.get("min_words", 90),
                 max_words=content_source.config.get("max_words", 350),
-                max_new_items=content_source.config.get("max_new_videos_per_poll", 1)
+                max_new_items=max_new
             )
 
-            discovered_stories = reddit_source.discover(existing_ids=existing_urls)
+            discovered_stories = reddit_source.discover(existing_ids=existing_ids)
             logger.info(
                 f"Discovered {len(discovered_stories)} new viral Reddit stories",
                 extra={"trace_id": job.trace_id, "source_id": str(source_id)}
             )
 
             for story in discovered_stories:
+                # Double-check DB to prevent duplicate ingestion
+                already_exists = session.query(SourcePost).filter(
+                    (SourcePost.source_url == story.url) | (SourcePost.title == story.title)
+                ).first()
+                if already_exists:
+                    logger.info(f"Skipping already ingested story: '{story.title[:50]}...'", extra={"trace_id": job.trace_id})
+                    continue
+
                 post_id = uuid.uuid4()
                 trace_id = f"story-{post_id}"
 
